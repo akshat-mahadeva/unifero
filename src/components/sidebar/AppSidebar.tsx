@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/sidebar";
 
 import { useUser } from "@clerk/nextjs";
-import { UserButton } from "@clerk/clerk-react";
+import { SignOutButton, useClerk } from "@clerk/clerk-react";
 import { useSessions } from "@/hooks/use-sessions-query";
 import { Button } from "@/components/ui/button";
 import {
@@ -53,9 +53,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 
 export default function AppSidebar() {
   const { user } = useUser();
+  const { openUserProfile } = useClerk();
   const { sessions, loading, deleteSession, updateTitle, isDeleting } =
     useSessions();
   const pathname = usePathname();
@@ -125,23 +127,27 @@ export default function AppSidebar() {
                       <SidebarMenuItem key={session.id}>
                         <SidebarMenuButton
                           asChild
-                          className="flex items-center gap-2 group"
+                          className="flex items-center gap-2"
                           isActive={isActive}
                         >
-                          <Link
-                            href={`/${session.id}`}
-                            className="w-full relative"
-                          >
-                            {" "}
-                            {/* Added relative for positioning if needed */}
-                            <MessageSquare className="h-4 w-4 flex-shrink-0" />
-                            <span className="truncate flex-1">
-                              {session.title || "New Chat"}
-                            </span>
+                          <div className="w-full relative group">
+                            <Link
+                              href={`/${session.id}`}
+                              className="flex items-center gap-2 w-full"
+                            >
+                              <MessageSquare className="h-4 w-4 flex-shrink-0" />
+                              <span className="truncate flex-1">
+                                {session.title || "New Chat"}
+                              </span>
+                            </Link>
                             <DropdownMenu
                               open={isMenuOpen}
                               onOpenChange={(open) => {
-                                if (!open) setOpenMenuFor(null); // Reset on close
+                                if (open) {
+                                  setOpenMenuFor(session.id);
+                                } else {
+                                  setOpenMenuFor(null);
+                                }
                               }}
                             >
                               <DropdownMenuTrigger asChild>
@@ -149,29 +155,17 @@ export default function AppSidebar() {
                                   variant="ghost"
                                   size="sm"
                                   className={cn(
-                                    "h-8 w-8 p-0 absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200" // Opacity-only + positioning like ChatGPT's trailing
+                                    "h-8 w-8 p-0 absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
                                   )}
-                                  onMouseEnter={() =>
-                                    setOpenMenuFor(session.id)
-                                  } // Open on hover (or remove for click-only)
-                                  onMouseLeave={() =>
-                                    setOpenMenuFor((prev) =>
-                                      prev === session.id ? null : prev
-                                    )
-                                  }
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                  }}
                                 >
                                   <MoreHorizontal className="h-3 w-3" />
                                 </Button>
                               </DropdownMenuTrigger>
-                              <DropdownMenuContent
-                                align="end"
-                                onMouseEnter={() => setOpenMenuFor(session.id)} // Keep open on content hover
-                                onMouseLeave={() =>
-                                  setOpenMenuFor((prev) =>
-                                    prev === session.id ? null : prev
-                                  )
-                                }
-                              >
+                              <DropdownMenuContent align="end">
                                 <DropdownMenuItem
                                   onClick={() => {
                                     handleStartEdit(
@@ -196,7 +190,7 @@ export default function AppSidebar() {
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
-                          </Link>
+                          </div>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
                     );
@@ -214,12 +208,40 @@ export default function AppSidebar() {
         </SidebarContent>
 
         <SidebarFooter>
-          <div className="p-2 flex items-center gap-2">
-            <UserButton />
-            <span className="truncate text-xs text-muted-foreground">
-              {user?.emailAddresses[0]?.emailAddress}
-            </span>
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                className="flex justify-start items-center gap-2"
+                size={"lg"}
+                variant={"ghost"}
+              >
+                <>
+                  <Avatar className=" h-6 w-6">
+                    <AvatarImage
+                      src={user?.imageUrl || undefined}
+                      alt={user?.firstName || "User"}
+                    />
+                    <AvatarFallback>
+                      {user?.firstName?.[0] ||
+                        user?.emailAddresses?.[0]?.emailAddress?.[0] ||
+                        "U"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="truncate text-xs text-muted-foreground">
+                    {user?.emailAddresses[0]?.emailAddress}
+                  </span>
+                </>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem onClick={() => openUserProfile()}>
+                Profile
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild className="w-full">
+                <SignOutButton>Sign out</SignOutButton>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </SidebarFooter>
       </Sidebar>
 

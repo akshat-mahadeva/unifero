@@ -10,7 +10,6 @@ import { Message, MessageContent } from "@/components/ai-elements/message";
 import {
   PromptInput,
   PromptInputBody,
-  PromptInputButton,
   type PromptInputMessage,
   PromptInputModelSelect,
   PromptInputModelSelectContent,
@@ -22,10 +21,11 @@ import {
   PromptInputToolbar,
   PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
-import { Fragment, useState } from "react";
+import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { UIMessage, useChat } from "@ai-sdk/react";
 import { Response } from "@/components/ai-elements/response";
-import { CopyIcon, GlobeIcon, RefreshCcwIcon } from "lucide-react";
+import { CopyIcon } from "lucide-react";
 import { Loader } from "@/components/ai-elements/loader";
 import { Action, Actions } from "@/components/ai-elements/actions";
 import { models } from "@/lib/models";
@@ -40,6 +40,7 @@ import ChatHeader from "./ChatHeader";
 import { useQueryClient } from "@tanstack/react-query";
 import { sessionKeys } from "@/hooks/use-sessions-query";
 import { usePathname } from "next/navigation";
+import { getRandomSuggestions } from "@/lib/get-suggestions";
 
 const Chat = ({
   sessionId,
@@ -52,13 +53,37 @@ const Chat = ({
 }) => {
   const [input, setInput] = useState("");
   const [model, setModel] = useState<string>(models[0].value);
-  const [webSearch, setWebSearch] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(true);
   const queryClient = useQueryClient();
   const pathname = usePathname();
 
+  // Ref used to scroll the conversation to the bottom
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+
+  const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
+    try {
+      bottomRef.current?.scrollIntoView({ behavior });
+    } catch (err) {
+      // ignore scrolling errors in environments that don't support it
+      console.debug(err);
+    }
+  };
+
   // Dynamically determine if we're on the home page
   const isHomePage = pathname === "/";
-  const { messages, sendMessage, status, regenerate } = useChat({
+
+  // Initialize suggestions only on client side to avoid hydration mismatch
+  useEffect(() => {
+    if (isHomePage && initialMessages.length === 0) {
+      setSuggestions(getRandomSuggestions(5));
+      setShowSuggestions(true);
+    } else {
+      setShowSuggestions(false);
+    }
+  }, [isHomePage, initialMessages.length]);
+
+  const { messages, sendMessage, status } = useChat({
     transport: new DefaultChatTransport({
       api: "/api/chat",
       prepareSendMessagesRequest: (request) => {
@@ -72,7 +97,6 @@ const Chat = ({
         const requestBody = {
           prompt: prompt,
           sessionId: sessionId,
-          webSearch: webSearch,
           model: model,
         };
         return {
@@ -101,6 +125,11 @@ const Chat = ({
     },
   });
 
+  // Auto-scroll when messages change or when status updates (e.g., new message submitted)
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages.length, status]);
+
   const handleSubmit = (message: PromptInputMessage) => {
     const hasText = Boolean(message.text);
     const hasAttachments = Boolean(message.files?.length);
@@ -114,6 +143,18 @@ const Chat = ({
       files: message.files,
     });
     setInput("");
+    // Hide suggestions after user sends a message
+    setShowSuggestions(false);
+  };
+
+  const handleSuggestionClick = (suggestion: string) => {
+    sendMessage({
+      text: suggestion,
+      files: [],
+    });
+    setInput("");
+    // Hide suggestions after user selects a suggestion
+    setShowSuggestions(false);
   };
 
   return (
@@ -138,7 +179,7 @@ const Chat = ({
                     className=" mb-2"
                   />
                 }
-                title="Ask Anything to Start Chat"
+                title="What's brewing in your mind today?"
                 description=""
               />
             ) : (
@@ -170,12 +211,6 @@ const Chat = ({
                                     i === messages.length - 1 && (
                                       <Actions className="mt-2">
                                         <Action
-                                          onClick={() => regenerate()}
-                                          label="Retry"
-                                        >
-                                          <RefreshCcwIcon className="size-3" />
-                                        </Action>
-                                        <Action
                                           onClick={() =>
                                             navigator.clipboard.writeText(
                                               part.text
@@ -199,14 +234,38 @@ const Chat = ({
                 </div>
               ))
             )}
-            {status === "submitted" && <Loader />}
+            {status === "submitted" && (
+              <div className="flex items-center text-sm text-muted-foreground gap-2 animate-pulse">
+                <Loader />
+                Preparing Response...
+              </div>
+            )}
+            <div ref={bottomRef} />
           </ConversationContent>
           <ConversationScrollButton />
         </Conversation>
 
+        {isHomePage &&
+          messages.length === 0 &&
+          showSuggestions &&
+          suggestions.length > 0 && (
+            <div className="mb-4">
+              <Suggestions>
+                {suggestions.map((suggestion, index) => (
+                  <Suggestion
+                    key={`${suggestion}-${index}`}
+                    suggestion={suggestion}
+                    onClick={handleSuggestionClick}
+                    className="whitespace-nowrap"
+                  />
+                ))}
+              </Suggestions>
+            </div>
+          )}
+
         <PromptInput
           onSubmit={handleSubmit}
-          className="mt-4"
+          className="mt-4 p-2 bg-popover border-none"
           globalDrop
           multiple
         >
@@ -218,13 +277,6 @@ const Chat = ({
           </PromptInputBody>
           <PromptInputToolbar>
             <PromptInputTools>
-              <PromptInputButton
-                variant={webSearch ? "default" : "ghost"}
-                onClick={() => setWebSearch(!webSearch)}
-              >
-                <GlobeIcon size={16} />
-                <span>Search</span>
-              </PromptInputButton>
               <PromptInputModelSelect
                 onValueChange={(value) => {
                   setModel(value);

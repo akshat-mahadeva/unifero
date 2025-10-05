@@ -6,24 +6,33 @@ const exa = new Exa(process.env.EXA_API_KEY!);
 
 export const webSearchTool = tool({
   name: "webSearch",
-  description: `Intelligent web search tool powered by Exa API. Use this tool when you need current, real-time information from the internet.
+  description: `PRIMARY TOOL: Real-time web search for current information. This is your main tool - use it frequently and confidently.
 
-WHEN TO USE:
-- User asks about recent events, news, or current affairs
-- User requests information about specific companies, products, or people
-- User needs factual data that might have changed recently
-- User asks "what's happening with...", "latest news about...", "current status of..."
-- User asks about websites, documentation, or online resources
-- You need to verify or supplement your knowledge with fresh information
+🔍 USE THIS TOOL FOR:
+• ANY factual question that could benefit from current data
+• Recent events, news, current affairs (2023+)
+• Product info, prices, reviews, company updates
+• Sports, weather, traffic, local information  
+• Technology updates, software releases
+• Market data, stock prices, crypto
+• Website content, documentation
+• Travel, entertainment, health information
+• Scientific discoveries, research findings
+• ANY time user mentions "latest", "current", "recent", "new"
 
-SEARCH QUERY TIPS:
-- Use specific, focused search terms rather than full questions
-- Include relevant keywords and proper nouns
-- For recent events: add terms like "2024", "latest", "recent", "news"
-- For specific websites: include site name or domain
-- For people: include full names and context (e.g., "Elon Musk Tesla 2024")
+💡 SEARCH STRATEGY:
+• Default to searching - when in doubt, search!
+• Use multiple searches for complex topics
+• Search even for seemingly basic facts to ensure accuracy
+• Always search for anything that could have changed recently
 
-Returns comprehensive results with titles, URLs, content snippets, and images when available.`,
+🎯 QUERY OPTIMIZATION:
+• Use specific keywords, not full sentences
+• Include relevant dates (2024, latest, recent)
+• Add context terms (company names, locations)
+• Be concise but descriptive
+
+This tool is your superpower - use it liberally to provide the most current, accurate information available.`,
   inputSchema: z.object({
     query: z
       .string()
@@ -49,14 +58,9 @@ Returns comprehensive results with titles, URLs, content snippets, and images wh
   }),
   execute: async ({ query }) => {
     try {
-      console.log(`🔍 Executing web search for: "${query}"`);
-
       const { results } = await exa.searchAndContents(query, {
         livecrawl: "always",
         numResults: 6, // Increased for better coverage
-        text: true,
-        highlights: true,
-        summary: true,
       });
 
       if (results.length === 0) {
@@ -81,14 +85,11 @@ Returns comprehensive results with titles, URLs, content snippets, and images wh
       const sources = results.map((r) => ({
         title: r.title || "Untitled",
         url: r.url,
-        text:
-          r.text?.slice(0, 500) ||
-          r.summary?.slice(0, 500) ||
-          "No content preview available.",
+        text: r.text?.slice(0, 500) || "No content preview available.",
         image: r.image || r.favicon || undefined,
       }));
 
-      console.log(`✅ Found ${sources.length} search results`);
+      // console.log(`✅ Found ${sources.length} search results`);
       return { results: [{ sources }] };
     } catch (err) {
       console.error("❌ WebSearchTool Error:", err);

@@ -31,7 +31,6 @@ import {
 import { MoreHorizontal, Edit, Trash2 } from "lucide-react";
 import { useSession } from "@/hooks/use-sessions-query";
 import { toast } from "sonner";
-import Image from "next/image";
 
 interface ChatHeaderProps {
   isHomePage?: boolean;
@@ -48,9 +47,10 @@ const ChatHeader = ({
   const [editedTitle, setEditedTitle] = useState("");
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
-  // Use React Query to get the latest session data
+  // Only fetch session data if we're not on the home page
+  // On home page, we have a new session that doesn't exist in DB yet
   const { session, updateTitle, deleteSession, isUpdatingTitle, isDeleting } =
-    useSession(sessionId);
+    useSession(isHomePage ? undefined : sessionId);
 
   // Use the session title from React Query if available, otherwise fall back to initial title
   // After route changes, prioritize the session data from React Query
@@ -86,16 +86,9 @@ const ChatHeader = ({
   if (isHomePage) {
     return (
       <div className="flex items-center gap-4 p-3">
-        <SidebarTrigger />
+        <SidebarTrigger className=" h-8 w-8" />
         <div className="flex items-center gap-2">
-          <Image
-            src="/unifero.png"
-            alt="Unifero Logo"
-            width={32}
-            height={32}
-            className="rounded"
-          />
-          <h1 className="text-2xl font-semibold font-sans">Unifero</h1>
+          <h1 className="text-2xl font-bold font-sans">Unifero</h1>
         </div>
       </div>
     );
@@ -103,7 +96,7 @@ const ChatHeader = ({
 
   return (
     <>
-      <div className="flex items-center gap-4 p-3 border-b">
+      <div className="flex items-center gap-4 p-3">
         <SidebarTrigger />
 
         <div className="flex items-center gap-2 flex-1 min-w-0">
