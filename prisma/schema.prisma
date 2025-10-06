@@ -21,7 +21,6 @@ model Session {
   updatedAt DateTime  @updatedAt
   userId    String?
   title     String?
-  user      String
   messages  Message[]
 }
 

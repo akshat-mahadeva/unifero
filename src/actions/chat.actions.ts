@@ -115,7 +115,6 @@ export async function getOrCreateSessionById(
       data: {
         id: sessionId,
         userId,
-        user: userId,
         title: title || "New Chat",
       },
       include: {
@@ -143,7 +142,6 @@ export async function createSession(opts: { title?: string } = {}) {
     const session = await prisma.session.create({
       data: {
         userId,
-        user: userId,
         title: opts.title || "New Chat",
       },
     });
