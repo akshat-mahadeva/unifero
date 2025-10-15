@@ -60,26 +60,29 @@ This tool is your superpower - use it liberally to provide the most current, acc
     try {
       const { results } = await exa.searchAndContents(query, {
         livecrawl: "always",
-        numResults: 6, // Increased for better coverage
+        numResults: 5, // Increased for better coverage
       });
 
-      if (results.length === 0) {
-        console.log("⚠️ No search results found");
-        return {
-          results: [
-            {
-              sources: [
-                {
-                  title: "No Results Found",
-                  url: "",
-                  text: `No web results were found for the query: "${query}". This could mean the topic is very new, very specific, or the search terms might need adjustment.`,
-                  image: undefined,
-                },
-              ],
-            },
-          ],
-        };
-      }
+      console.log(`🔍 WebSearchTool Query: "${query}"`);
+      console.log(`🌐 Retrieved ${results.length} raw results from Exa`);
+
+      // if (results.length === 0) {
+      //   console.log("⚠️ No search results found");
+      //   return {
+      //     results: [
+      //       {
+      //         sources: [
+      //           {
+      //             title: "No Results Found",
+      //             url: "",
+      //             text: `No web results were found for the query: "${query}". This could mean the topic is very new, very specific, or the search terms might need adjustment.`,
+      //             image: undefined,
+      //           },
+      //         ],
+      //       },
+      //     ],
+      //   };
+      // }
 
       // Map and normalize Exa results into sources with enhanced data
       const sources = results.map((r) => ({

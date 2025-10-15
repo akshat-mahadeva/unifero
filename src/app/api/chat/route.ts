@@ -124,10 +124,10 @@ Remember: You're not just an AI assistant - you're a real-time information gatew
           model: openai(model),
           messages: [...convertedMessages, { role: "user", content: prompt }],
           tools: tools, // Only provide tools if web search is enabled
-          experimental_transform: smoothStream({
-            delayInMs: 5,
-            chunking: "line",
-          }),
+          // experimental_transform: smoothStream({
+          //   delayInMs: 5,
+          //   chunking: "line",
+          // }),
           stopWhen: stepCountIs(2),
           onStepFinish: async (step: StreamStep) => {
             const toolResults = step?.toolResults ?? [];

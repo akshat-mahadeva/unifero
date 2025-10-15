@@ -75,7 +75,7 @@ export const WebSearchUIRenderer = ({
                     <AvatarImage
                       src={source.image}
                       alt={source.title}
-                      className="rounded-md"
+                      className="rounded-md object-cover"
                     />
                     <AvatarFallback className="rounded-md">
                       {source.title.slice(0, 2)}
