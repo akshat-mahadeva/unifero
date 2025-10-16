@@ -36,6 +36,7 @@ import {
 import { DefaultChatTransport } from "ai";
 import { toast } from "sonner";
 import ChatHeader from "./ChatHeader";
+import { TextGenerateEffect } from "@/components/ui/text-generate-effect";
 import { useQueryClient } from "@tanstack/react-query";
 import { sessionKeys } from "@/hooks/use-sessions-query";
 import { usePathname } from "next/navigation";
@@ -185,12 +186,17 @@ const Chat = ({
                   <Image
                     src={"/unifero.png"}
                     alt="Unifero Logo"
-                    width={200}
-                    height={200}
+                    width={160}
+                    height={160}
                     className=" mb-2"
                   />
                 }
-                title="What's brewing in your mind today?"
+                title={
+                  <TextGenerateEffect
+                    words={"What's brewing in your mind today?"}
+                    className="text-2xl"
+                  />
+                }
                 description=""
               />
             ) : (
