@@ -14,41 +14,41 @@ export const LoaderOne = () => {
     };
   };
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1.5">
       <motion.div
         initial={{
-          y: 0,
+          scale: 1,
         }}
         animate={{
-          y: [0, 10, 0],
-          opacity: [0.4, 1, 0.4],
+          scale: [1, 1.6, 1],
+          opacity: [0.8, 1, 0.8],
         }}
         transition={transition(0)}
-        className="h-2 w-2rounded-full border "
+        className="h-2 w-2 rounded-full "
         style={{ background: "var(--color-primary)" }}
       />
       <motion.div
         initial={{
-          y: 0,
+          scale: 1,
         }}
         animate={{
-          y: [0, 10, 0],
-          opacity: [0.4, 1, 0.4],
+          scale: [1, 1.6, 1],
+          opacity: [0.8, 1, 0.8],
         }}
         transition={transition(1)}
-        className="h-2 w-2rounded-full border "
+        className="h-2 w-2 rounded-full "
         style={{ background: "var(--color-primary)" }}
       />
       <motion.div
         initial={{
-          y: 0,
+          scale: 1,
         }}
         animate={{
-          y: [0, 10, 0],
-          opacity: [0.4, 1, 0.4],
+          scale: [1, 1.6, 1],
+          opacity: [0.8, 1, 0.8],
         }}
         transition={transition(2)}
-        className="h-2 w-2rounded-full border"
+        className="h-2 w-2 rounded-full"
         style={{ background: "var(--color-primary)" }}
       />
     </div>
