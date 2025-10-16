@@ -41,6 +41,7 @@ import { sessionKeys } from "@/hooks/use-sessions-query";
 import { usePathname } from "next/navigation";
 import { getRandomSuggestions } from "@/lib/get-suggestions";
 import { LoaderOne } from "../ui/loaders";
+import { ChatSDKError } from "@/lib/errors";
 
 const Chat = ({
   sessionId,
@@ -127,8 +128,11 @@ const Chat = ({
       window.dispatchEvent(new CustomEvent("chat-history-updated"));
     },
     onError: (error) => {
-      console.log("[stream_error]:", error);
-      toast.error(`${error.message}`);
+      if (error instanceof ChatSDKError) {
+        toast.error(error.message);
+      } else {
+        toast.error("An unexpected error occurred. Please try again.");
+      }
     },
   });
 
