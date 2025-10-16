@@ -54,6 +54,8 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
+import { ModeToggle } from "@/components/ui/mode-toggle";
+import { Separator } from "../ui/separator";
 
 export default function AppSidebar() {
   const { user } = useUser();
@@ -223,6 +225,13 @@ export default function AppSidebar() {
         </SidebarContent>
 
         <SidebarFooter>
+          <div className="px-2 flex items-center text-muted-foreground text-sm gap-2 justify-between">
+            Theme
+            <ModeToggle />
+          </div>
+
+          <Separator />
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -230,22 +239,20 @@ export default function AppSidebar() {
                 size={"lg"}
                 variant={"ghost"}
               >
-                <>
-                  <Avatar className=" h-6 w-6">
-                    <AvatarImage
-                      src={user?.imageUrl || undefined}
-                      alt={user?.firstName || "User"}
-                    />
-                    <AvatarFallback>
-                      {user?.firstName?.[0] ||
-                        user?.emailAddresses?.[0]?.emailAddress?.[0] ||
-                        "U"}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span className="truncate text-xs text-muted-foreground">
-                    {user?.emailAddresses[0]?.emailAddress}
-                  </span>
-                </>
+                <Avatar className=" h-6 w-6">
+                  <AvatarImage
+                    src={user?.imageUrl || undefined}
+                    alt={user?.firstName || "User"}
+                  />
+                  <AvatarFallback>
+                    {user?.firstName?.[0] ||
+                      user?.emailAddresses?.[0]?.emailAddress?.[0] ||
+                      "U"}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="truncate text-xs text-muted-foreground">
+                  {user?.emailAddresses[0]?.emailAddress}
+                </span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent>

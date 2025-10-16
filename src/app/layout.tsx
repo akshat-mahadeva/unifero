@@ -6,6 +6,7 @@ import { dark } from "@clerk/themes";
 import { Toaster } from "sonner";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { Manrope } from "next/font/google";
+import { ThemeProvider } from "@/components/providers/theme-provider";
 
 const manrope = Manrope({
   subsets: ["latin"],
@@ -41,14 +42,21 @@ export default function RootLayout({
         },
       }}
     >
-      <html lang="en">
+      <html lang="en" suppressHydrationWarning>
         <body
-          className={`${geistMono.variable} ${manrope.variable} antialiased font-sans dark`}
+          className={`${geistMono.variable} ${manrope.variable} antialiased font-sans`}
         >
-          <QueryProvider>
-            {children}
-            <Toaster style={{}} />
-          </QueryProvider>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            <QueryProvider>
+              {children}
+              <Toaster style={{}} />
+            </QueryProvider>
+          </ThemeProvider>
         </body>
       </html>
     </ClerkProvider>

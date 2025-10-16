@@ -683,7 +683,7 @@ export const PromptInputModelSelectTrigger = ({
       // Ensure the trigger remains transparent in all states (hover, expanded, dark)
       "border-none bg-transparent font-medium text-muted-foreground shadow-none transition-colors",
       // Override hover/expanded backgrounds that might be applied by the base SelectTrigger
-      ' hover:text-primary-foreground [&[aria-expanded="true"]]:bg-transparent [&[aria-expanded="true"]]:text-muted-foreground dark:bg-transparent dark:hover:bg-transparent',
+      ' hover:text-foreground [&[aria-expanded="true"]]:bg-transparent [&[aria-expanded="true"]]:text-muted-foreground dark:bg-transparent dark:hover:bg-transparent',
       className
     )}
     {...props}

@@ -281,7 +281,7 @@ const Chat = ({
 
         <PromptInput
           onSubmit={handleSubmit}
-          className="mt-4 p-1 bg-popover border-none"
+          className="mt-4 p-1 bg-popover dark:border-none shadow-none "
           globalDrop
           multiple
         >
