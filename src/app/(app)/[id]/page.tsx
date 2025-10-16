@@ -9,7 +9,7 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
   const chat = await getSessionById(id);
 
   if (!chat) {
-    notFound();
+    return notFound();
   }
 
   const uiMessages = convertToUIMessages(chat.messages);

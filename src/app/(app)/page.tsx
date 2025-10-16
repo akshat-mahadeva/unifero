@@ -1,10 +1,12 @@
 import Chat from "@/components/chat/Chat";
 import { generateId } from "ai";
-import React from "react";
 
-const page = () => {
+export default async function Page() {
   const id = generateId();
-  return <Chat sessionId={id} />;
-};
+  if (!id) {
+    // Throw to let Next.js render the nearest error boundary (src/app/(app)/error.tsx)
+    throw new Error("Error generating session ID");
+  }
 
-export default page;
+  return <Chat sessionId={id} />;
+}

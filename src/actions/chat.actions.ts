@@ -439,15 +439,11 @@ export async function saveMessagesToSession(
           },
         });
 
-        console.log(`Saved message ${message.id} for session ${sessionId}`);
-
         // Keep track of the assistant message ID for tool snapshots
         if (message.role === "assistant") {
           assistantMessageId = savedMessage.id;
         }
       } else {
-        console.log(`Message ${message.id} already exists, skipping`);
-
         // If this is an existing assistant message, we can still use it for tool snapshots
         if (existingMessage.role === "assistant") {
           assistantMessageId = existingMessage.id;
@@ -478,13 +474,6 @@ export async function saveMessagesToSession(
                 messageId: assistantMessageId,
               },
             });
-            console.log(
-              `Saved tool snapshot ${toolResult.toolName} for message ${assistantMessageId}`
-            );
-          } else {
-            console.log(
-              `Tool snapshot ${toolResult.toolName} already exists for message ${assistantMessageId}, skipping`
-            );
           }
         } catch (toolError) {
           console.error(

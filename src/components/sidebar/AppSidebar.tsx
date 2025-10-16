@@ -43,11 +43,11 @@ import {
 import { Input } from "@/components/ui/input";
 import {
   Plus,
-  MessageSquare,
   MoreHorizontal,
   Edit,
   Trash2,
   Loader2,
+  MessageCircle,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -66,6 +66,7 @@ export default function AppSidebar() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [deleteSessionId, setDeleteSessionId] = useState<string | null>(null);
   const [openMenuFor, setOpenMenuFor] = useState<string | null>(null);
+  const [hoveredSession, setHoveredSession] = useState<string | null>(null);
 
   const handleStartEdit = (sessionId: string, currentTitle: string) => {
     setEditingSession(sessionId);
@@ -100,13 +101,18 @@ export default function AppSidebar() {
   return (
     <>
       <Sidebar>
-        <SidebarHeader className="pt-4">
-          <Link href="/">
-            <Button className="w-full justify-start">
-              <Plus className="h-4 w-4 mr-2" />
-              New Chat
-            </Button>
-          </Link>
+        <SidebarHeader>
+          <div className="flex items-center gap-2 w-full justify-between">
+            <h1 className=" text-2xl font-bold text-primary font-sans">
+              Unifero
+            </h1>
+
+            <Link href="/">
+              <Button variant={"ghost"} size={"icon"}>
+                <Plus className="h-4 w-4" />
+              </Button>
+            </Link>
+          </div>
         </SidebarHeader>
 
         <SidebarContent>
@@ -122,20 +128,25 @@ export default function AppSidebar() {
                   {sessions.map((session) => {
                     const isActive = pathname === `/${session.id}`;
                     const isMenuOpen = openMenuFor === session.id;
+                    const isHovered = hoveredSession === session.id;
 
                     return (
-                      <SidebarMenuItem key={session.id}>
+                      <SidebarMenuItem
+                        key={session.id}
+                        onMouseEnter={() => setHoveredSession(session.id)}
+                        onMouseLeave={() => setHoveredSession(null)}
+                      >
                         <SidebarMenuButton
                           asChild
                           className="flex items-center gap-2"
                           isActive={isActive}
                         >
-                          <div className="w-full relative group">
+                          <div className="w-full relative">
                             <Link
                               href={`/${session.id}`}
                               className="flex items-center gap-2 w-full"
                             >
-                              <MessageSquare className="h-4 w-4 flex-shrink-0" />
+                              <MessageCircle className="size-3 flex-shrink-0 text-muted-foreground" />
                               <span className="truncate flex-1">
                                 {session.title || "New Chat"}
                               </span>
@@ -155,7 +166,11 @@ export default function AppSidebar() {
                                   variant="ghost"
                                   size="sm"
                                   className={cn(
-                                    "h-8 w-8 p-0 absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                                    "h-8 w-8 p-0 absolute right-1 top-1/2 -translate-y-1/2 transition-opacity duration-200",
+                                    (isHovered || isActive || isMenuOpen) &&
+                                      "opacity-100",
+                                    !(isHovered || isActive || isMenuOpen) &&
+                                      "opacity-0"
                                   )}
                                   onClick={(e) => {
                                     e.preventDefault();

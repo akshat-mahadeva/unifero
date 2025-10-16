@@ -18,7 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import type { ChatStatus, FileUIPart } from "ai";
 import {
-  ArrowUp,
+  Forward,
   ImageIcon,
   Loader2Icon,
   PaperclipIcon,
@@ -573,7 +573,7 @@ export const PromptInputButton = ({
   return (
     <Button
       className={cn(
-        "shrink-0 gap-1.5 rounded-lg",
+        "shrink-0 gap-1.5 rounded-lg bg-transparent",
         variant === "ghost" && "text-muted-foreground",
         newSize === "default" && "px-3",
         className
@@ -641,7 +641,7 @@ export const PromptInputSubmit = ({
   children,
   ...props
 }: PromptInputSubmitProps) => {
-  let Icon = <ArrowUp className="size-4" />;
+  let Icon = <Forward className="size-4" />;
 
   if (status === "submitted") {
     Icon = <Loader2Icon className="size-4 animate-spin" />;
@@ -680,8 +680,10 @@ export const PromptInputModelSelectTrigger = ({
 }: PromptInputModelSelectTriggerProps) => (
   <SelectTrigger
     className={cn(
+      // Ensure the trigger remains transparent in all states (hover, expanded, dark)
       "border-none bg-transparent font-medium text-muted-foreground shadow-none transition-colors",
-      'hover:bg-accent hover:text-foreground [&[aria-expanded="true"]]:bg-accent [&[aria-expanded="true"]]:text-foreground',
+      // Override hover/expanded backgrounds that might be applied by the base SelectTrigger
+      ' hover:text-primary-foreground [&[aria-expanded="true"]]:bg-transparent [&[aria-expanded="true"]]:text-muted-foreground dark:bg-transparent dark:hover:bg-transparent',
       className
     )}
     {...props}

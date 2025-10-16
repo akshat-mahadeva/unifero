@@ -9,7 +9,6 @@ import {
   streamText,
   createUIMessageStream,
   createUIMessageStreamResponse,
-  smoothStream,
   stepCountIs,
   convertToModelMessages,
   UIMessage,
@@ -124,10 +123,6 @@ Remember: You're not just an AI assistant - you're a real-time information gatew
           model: openai(model),
           messages: [...convertedMessages, { role: "user", content: prompt }],
           tools: tools, // Only provide tools if web search is enabled
-          // experimental_transform: smoothStream({
-          //   delayInMs: 5,
-          //   chunking: "line",
-          // }),
           stopWhen: stepCountIs(2),
           onStepFinish: async (step: StreamStep) => {
             const toolResults = step?.toolResults ?? [];
@@ -143,24 +138,10 @@ Remember: You're not just an AI assistant - you're a real-time information gatew
                   toolCalls,
                   assistantToolResults
                 );
-                console.log(
-                  `Collected tool result: ${(tr as ToolResultPart)?.toolName}`
-                );
               } catch (e: unknown) {
                 console.error("Error collecting tool result:", e);
               }
             }
-
-            console.log(
-              `Total collected tool results: ${assistantToolResults.length}`
-            );
-          },
-          onFinish: async ({ text, toolCalls, finishReason }) => {
-            console.log("Generation finished:", {
-              finishReason,
-              toolCallsCount: toolCalls?.length || 0,
-              textLength: text?.length || 0,
-            });
           },
         });
 
@@ -172,16 +153,6 @@ Remember: You're not just an AI assistant - you're a real-time information gatew
         return `Error: ${message}`;
       },
       onFinish: async ({ messages }) => {
-        console.log(`Stream finished with ${messages.length} messages`);
-        console.log(
-          "Messages received:",
-          messages.map((m) => ({
-            id: m.id,
-            role: m.role,
-            type: m.parts?.[0]?.type,
-          }))
-        );
-
         // Check if user message is already included
         const hasUserMessage = messages.some((m) => m.role === "user");
 
@@ -200,18 +171,13 @@ Remember: You're not just an AI assistant - you're a real-time information gatew
             ],
           };
           allMessages = [userMessage, ...messages];
-          console.log("Added user message to save to database");
         }
 
-        // Save all messages including the user's input and assistant response with tool results
         try {
           await saveMessagesToSession(
             sessionId,
             allMessages,
             assistantToolResults.length > 0 ? assistantToolResults : undefined
-          );
-          console.log(
-            `Saved ${allMessages.length} messages and ${assistantToolResults.length} tool results to database`
           );
         } catch (error) {
           console.error("Error saving messages to database:", error);

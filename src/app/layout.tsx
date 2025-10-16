@@ -47,7 +47,7 @@ export default function RootLayout({
         >
           <QueryProvider>
             {children}
-            <Toaster />
+            <Toaster style={{}} />
           </QueryProvider>
         </body>
       </html>

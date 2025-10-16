@@ -26,7 +26,6 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { UIMessage, useChat } from "@ai-sdk/react";
 import { Response } from "@/components/ai-elements/response";
 import { CopyIcon } from "lucide-react";
-import { Loader } from "@/components/ai-elements/loader";
 import { Action, Actions } from "@/components/ai-elements/actions";
 import { models } from "@/lib/models";
 import Image from "next/image";
@@ -41,6 +40,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { sessionKeys } from "@/hooks/use-sessions-query";
 import { usePathname } from "next/navigation";
 import { getRandomSuggestions } from "@/lib/get-suggestions";
+import { LoaderOne } from "../ui/loaders";
 
 const Chat = ({
   sessionId,
@@ -94,6 +94,16 @@ const Chat = ({
             ? lastMessage.parts[0].text
             : "";
 
+        if (window.location.pathname === "/") {
+          window.history.replaceState({}, "", `/${sessionId}`);
+          setTimeout(() => {
+            queryClient.invalidateQueries({
+              queryKey: sessionKeys.detail(sessionId),
+            });
+          }, 100);
+        }
+        window.dispatchEvent(new CustomEvent("chat-history-updated"));
+
         const requestBody = {
           prompt: prompt,
           sessionId: sessionId,
@@ -106,11 +116,8 @@ const Chat = ({
     }),
     messages: initialMessages,
     onFinish: () => {
-      // Only update URL if we're on the home page (new chat)
-      // Don't update if we're already on a search page to avoid hijacking navigation
       if (window.location.pathname === "/") {
         window.history.replaceState({}, "", `/${sessionId}`);
-        // Add a small delay to ensure the session is saved before invalidating
         setTimeout(() => {
           queryClient.invalidateQueries({
             queryKey: sessionKeys.detail(sessionId),
@@ -121,7 +128,7 @@ const Chat = ({
     },
     onError: (error) => {
       console.log("[stream_error]:", error);
-      toast.error(`Error in chat: ${error.message}`);
+      toast.error(`${error.message}`);
     },
   });
 
@@ -235,9 +242,8 @@ const Chat = ({
               ))
             )}
             {status === "submitted" && (
-              <div className="flex items-center text-sm text-muted-foreground gap-2 animate-pulse">
-                <Loader />
-                Preparing Response...
+              <div className="flex items-center text-sm gap-2">
+                <LoaderOne />
               </div>
             )}
             <div ref={bottomRef} />
@@ -265,7 +271,7 @@ const Chat = ({
 
         <PromptInput
           onSubmit={handleSubmit}
-          className="mt-4 p-2 bg-popover border-none"
+          className="mt-4 p-1 bg-popover border-none"
           globalDrop
           multiple
         >
