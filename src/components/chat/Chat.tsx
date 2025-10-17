@@ -73,7 +73,7 @@ const Chat = ({
   };
 
   // Dynamically determine if we're on the home page
-  const isHomePage = pathname === "/";
+  const isHomePage = pathname === "/" || pathname === "/web-search";
 
   // Initialize suggestions only on client side to avoid hydration mismatch
   useEffect(() => {
@@ -87,7 +87,7 @@ const Chat = ({
 
   const { messages, sendMessage, status } = useChat({
     transport: new DefaultChatTransport({
-      api: "/api/chat",
+      api: "/api/deep-search",
       prepareSendMessagesRequest: (request) => {
         // Get the prompt from the message being sent
         const lastMessage = request.messages[request.messages.length - 1];
@@ -96,8 +96,11 @@ const Chat = ({
             ? lastMessage.parts[0].text
             : "";
 
-        if (window.location.pathname === "/") {
-          window.history.replaceState({}, "", `/${sessionId}`);
+        if (
+          window.location.pathname === "/" ||
+          window.location.pathname === "/web-search"
+        ) {
+          window.history.replaceState({}, "", `/chat/${sessionId}`);
           setTimeout(() => {
             queryClient.invalidateQueries({
               queryKey: sessionKeys.detail(sessionId),
@@ -118,8 +121,11 @@ const Chat = ({
     }),
     messages: initialMessages,
     onFinish: () => {
-      if (window.location.pathname === "/") {
-        window.history.replaceState({}, "", `/${sessionId}`);
+      if (
+        window.location.pathname === "/" ||
+        window.location.pathname === "/web-search"
+      ) {
+        window.history.replaceState({}, "", `/chat/${sessionId}`);
         setTimeout(() => {
           queryClient.invalidateQueries({
             queryKey: sessionKeys.detail(sessionId),

@@ -40,19 +40,11 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import HistoryDialog from "./HistoryDialog";
 import { Input } from "@/components/ui/input";
-import {
-  Plus,
-  MoreHorizontal,
-  Edit,
-  Trash2,
-  Loader2,
-  MessageCircle,
-} from "lucide-react";
+import { Globe, Search, BookOpen, BlocksIcon } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { ModeToggle } from "@/components/ui/mode-toggle";
 import { Separator } from "../ui/separator";
@@ -62,20 +54,18 @@ export default function AppSidebar() {
   const { openUserProfile } = useClerk();
   const { sessions, loading, deleteSession, updateTitle, isDeleting } =
     useSessions();
-  const pathname = usePathname();
+  // const pathname = usePathname();
   const [editingSession, setEditingSession] = useState<string | null>(null);
   const [editedTitle, setEditedTitle] = useState("");
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [deleteSessionId, setDeleteSessionId] = useState<string | null>(null);
-  const [openMenuFor, setOpenMenuFor] = useState<string | null>(null);
-  const [hoveredSession, setHoveredSession] = useState<string | null>(null);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   const handleStartEdit = (sessionId: string, currentTitle: string) => {
     setEditingSession(sessionId);
     setEditedTitle(currentTitle);
     setIsEditDialogOpen(true);
     // close any open menu
-    setOpenMenuFor(null);
   };
 
   const handleSaveEdit = async () => {
@@ -96,10 +86,10 @@ export default function AppSidebar() {
     if (!deleteSessionId) return;
 
     // close any open menu before deleting
-    setOpenMenuFor(null);
     deleteSession(deleteSessionId);
     setDeleteSessionId(null);
   };
+
   return (
     <>
       <Sidebar>
@@ -108,126 +98,78 @@ export default function AppSidebar() {
             <h1 className=" text-2xl font-bold text-primary font-sans">
               Unifero
             </h1>
-
-            <Link href="/">
-              <Button variant={"ghost"} size={"icon"}>
-                <Plus className="h-4 w-4" />
-              </Button>
-            </Link>
           </div>
         </SidebarHeader>
 
         <SidebarContent>
           <SidebarGroup>
-            <SidebarGroupLabel>Recent Chats</SidebarGroupLabel>
+            <SidebarGroupLabel>Navigate</SidebarGroupLabel>
             <SidebarGroupContent>
-              {loading ? (
-                <div className="flex items-center justify-center p-4">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                </div>
-              ) : (
-                <SidebarMenu>
-                  {sessions.map((session) => {
-                    const isActive = pathname === `/${session.id}`;
-                    const isMenuOpen = openMenuFor === session.id;
-                    const isHovered = hoveredSession === session.id;
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <Link href="/">
+                      <div className="flex items-center gap-2">
+                        <BlocksIcon className="size-4 flex-shrink-0 text-muted-foreground" />
+                        <span>Dashboard</span>
+                      </div>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
 
-                    return (
-                      <SidebarMenuItem
-                        key={session.id}
-                        onMouseEnter={() => setHoveredSession(session.id)}
-                        onMouseLeave={() => setHoveredSession(null)}
-                      >
-                        <SidebarMenuButton
-                          asChild
-                          className="flex items-center gap-2"
-                          isActive={isActive}
-                        >
-                          <div className="w-full relative">
-                            <Link
-                              href={`/${session.id}`}
-                              className="flex items-center gap-2 w-full"
-                            >
-                              <MessageCircle className="size-3 flex-shrink-0 text-muted-foreground" />
-                              <span className="truncate flex-1">
-                                {session.title || "New Chat"}
-                              </span>
-                            </Link>
-                            <DropdownMenu
-                              open={isMenuOpen}
-                              onOpenChange={(open) => {
-                                if (open) {
-                                  setOpenMenuFor(session.id);
-                                } else {
-                                  setOpenMenuFor(null);
-                                }
-                              }}
-                            >
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className={cn(
-                                    "h-8 w-8 p-0 absolute right-1 top-1/2 -translate-y-1/2 transition-opacity duration-200",
-                                    (isHovered || isActive || isMenuOpen) &&
-                                      "opacity-100",
-                                    !(isHovered || isActive || isMenuOpen) &&
-                                      "opacity-0"
-                                  )}
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                  }}
-                                >
-                                  <MoreHorizontal className="h-3 w-3" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    handleStartEdit(
-                                      session.id,
-                                      session.title || ""
-                                    );
-                                    setOpenMenuFor(null); // Close after action
-                                  }}
-                                >
-                                  <Edit className="h-4 w-4 mr-2" />
-                                  Edit title
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setDeleteSessionId(session.id);
-                                    setOpenMenuFor(null);
-                                  }}
-                                  className="text-destructive"
-                                >
-                                  <Trash2 className="h-4 w-4 mr-2" />
-                                  Delete
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    );
-                  })}
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <Link href="/web-search">
+                      <div className="flex items-center gap-2">
+                        <Globe className="size-4 flex-shrink-0 text-muted-foreground" />
+                        <span>Web Search</span>
+                      </div>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
 
-                  {sessions.length === 0 && !loading && (
-                    <div className="p-4 text-sm text-muted-foreground text-center">
-                      No chats yet. Start a new conversation!
-                    </div>
-                  )}
-                </SidebarMenu>
-              )}
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <Link href="/deep-search">
+                      <div className="flex items-center gap-2">
+                        <Search className="size-4 flex-shrink-0 text-muted-foreground" />
+                        <span className="opacity-50">Deep Search</span>
+                      </div>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <Link href="/knowledge-base">
+                      <div className="flex items-center gap-2">
+                        <BookOpen className="size-4 flex-shrink-0 text-muted-foreground" />
+                        <span>Knowledge Base</span>
+                      </div>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         </SidebarContent>
 
         <SidebarFooter>
           <div className="px-2 flex items-center text-muted-foreground text-sm gap-2 justify-between">
-            Theme
-            <ModeToggle />
+            <div className="flex items-center gap-2">
+              Theme
+              <ModeToggle />
+            </div>
+
+            <div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsHistoryOpen(true)}
+              >
+                History
+              </Button>
+            </div>
           </div>
 
           <Separator />
@@ -337,6 +279,15 @@ export default function AppSidebar() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <HistoryDialog
+        open={isHistoryOpen}
+        onOpenChange={(open) => setIsHistoryOpen(open)}
+        sessions={sessions}
+        loading={loading}
+        onEdit={(id, title) => handleStartEdit(id, title)}
+        onDelete={(id) => setDeleteSessionId(id)}
+      />
     </>
   );
 }

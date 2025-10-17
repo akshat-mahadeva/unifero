@@ -31,6 +31,7 @@ model Message {
   role          Role
   content       String         @db.Text
   sessionId     String
+  completed     Boolean        @default(false)
   session       Session        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   toolSnapshots ToolSnapshot[]
 
@@ -49,6 +50,17 @@ model ToolSnapshot {
   message    Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
   @@index([messageId])
+}
+
+model TestMessage {
+  id        String   @id @default(cuid())
+  sessionId String
+  text      String
+  progress  Int      @default(0)
+  reasoning String?  @default("")
+  status    String   @default("running") // running | completed | terminated
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 enum Role {
