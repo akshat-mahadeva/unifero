@@ -1,3 +1,4 @@
+import { DeepSearchDBMessage, DeepSearchUIMessage } from "@/types/deep-search";
 import { UIMessage } from "ai";
 
 /**
@@ -69,4 +70,37 @@ export const convertSingleToUIMessage = (
       },
     ],
   } as UIMessage;
+};
+
+// lib/convertToUIMessage.ts
+export const convertToDeepSearchUIMessages = (
+  messages: DeepSearchDBMessage[]
+): DeepSearchUIMessage[] => {
+  return messages.map((m) => ({
+    id: m.id!,
+    role: ["system", "user", "assistant"].includes(m.role)
+      ? (m.role as "system" | "user" | "assistant")
+      : "user",
+    metadata: {
+      progress: m.progress ?? 0,
+      isDeepSearchInitiated: m.isDeepSearchInitiated ?? false,
+    },
+    parts: [
+      ...(m.isDeepSearchInitiated
+        ? [
+            {
+              type: "data-deep-search-progress",
+              data: {
+                progress: m.progress ?? 0,
+                isDeepSearchInitiated: m.isDeepSearchInitiated ?? false,
+              },
+            },
+          ]
+        : []),
+      {
+        type: "text" as const,
+        text: m.content ?? "",
+      },
+    ],
+  })) as DeepSearchUIMessage[];
 };

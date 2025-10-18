@@ -52,15 +52,51 @@ model ToolSnapshot {
   @@index([messageId])
 }
 
-model TestMessage {
-  id        String   @id @default(cuid())
-  sessionId String
-  text      String
-  progress  Int      @default(0)
-  reasoning String?  @default("")
-  status    String   @default("running") // running | completed | terminated
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model DeepSearchSession {
+  id             String              @id @default(cuid())
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  userId         String?
+  title          String?
+  activeStreamId String? // 🔥 Track active stream
+  canceledAt     DateTime? // 🔥 Track cancellation
+  messages       DeepSearchMessage[]
+}
+
+model DeepSearchMessage {
+  id                     String                   @id @default(cuid())
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+  role                   DeepSearchRole
+  content                String                   @db.Text
+  progress               Int                      @default(0)
+  sessionId              String
+  isDeepSearchInitiated  Boolean                  @default(false)
+  completed              Boolean                  @default(false)
+  session                DeepSearchSession        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  DeepSearchToolSnapshot DeepSearchToolSnapshot[]
+
+  @@index([sessionId])
+}
+
+model DeepSearchToolSnapshot {
+  id         String            @id @default(cuid())
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  toolName   String
+  input      Json
+  isExecuted Boolean           @default(false)
+  output     Json
+  messageId  String
+  message    DeepSearchMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+}
+
+enum DeepSearchRole {
+  user
+  assistant
+  system
 }
 
 enum Role {

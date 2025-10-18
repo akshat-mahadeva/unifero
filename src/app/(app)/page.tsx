@@ -1,8 +1,8 @@
 import React from "react";
-import TestMessage from "@/components/TestMessage";
+import DeepSearchChat from "@/components/deep-search/DeepSearchChat";
 
 const page = () => {
-  return <TestMessage />;
+  return <DeepSearchChat />;
 };
 
 export default page;

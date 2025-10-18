@@ -20,6 +20,5 @@ export type DBMessage = {
   role: "user" | "assistant" | "system" | string;
   content?: string | null;
   sessionId?: string;
-  // This matches the Prisma relation field name `toolSnapshots` used in the code
   toolSnapshots?: ToolSnapshot[] | null;
 };
