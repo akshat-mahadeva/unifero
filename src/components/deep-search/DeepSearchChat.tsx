@@ -232,9 +232,6 @@ const DeepSearchChat = ({
                         className="flex items-center gap-2 w-full"
                       >
                         <MessageContent>
-                          {/* Render progress card ONLY if there's progress and NO text content yet */}
-
-                          {/* Render text parts */}
                           {message.parts.map((part, i) => {
                             switch (part.type) {
                               case "data-deep-search-progress":

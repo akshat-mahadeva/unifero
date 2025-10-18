@@ -86,12 +86,6 @@ async function runProgressUpdater(
 export async function POST(req: Request) {
   try {
     const { model, sessionId, prompt } = await req.json();
-    console.log(
-      `🚀 POST /api/deep-search - sessionId: ${sessionId}, prompt: ${prompt.slice(
-        0,
-        50
-      )}...`
-    );
 
     if (!sessionId || !model || !prompt) {
       return new Response("Missing required fields", { status: 400 });
@@ -103,10 +97,8 @@ export async function POST(req: Request) {
       prompt.slice(0, 20)
     );
 
-    // 🔥 Clear any previous active stream to prevent race conditions
     await updateActiveStreamId(sessionId, null);
 
-    // 🔥 SAVE USER MESSAGE FIRST
     await saveDeepSearchMessagesToSession(sessionId, [
       {
         id: `user-${Date.now()}`,
@@ -129,11 +121,9 @@ export async function POST(req: Request) {
 
     // Generate unique stream ID BEFORE creating the stream
     const streamId = generateId();
-    console.log(`Generated stream ID: ${streamId} for session: ${sessionId}`);
 
     // Save stream ID to database BEFORE streaming starts
     await updateActiveStreamId(sessionId, streamId);
-    console.log(`Saved activeStreamId ${streamId} to session ${sessionId}`);
 
     // Create UI Message Stream with custom data streaming
     const stream = createUIMessageStream<DeepSearchUIMessage>({
@@ -152,11 +142,7 @@ export async function POST(req: Request) {
 
         // 🔥 WAIT for progress updater to complete FIRST (reaches 100%)
         try {
-          console.log("Starting progress updater...");
           await runProgressUpdater(sessionId, assistantMessageId, writer);
-          console.log(
-            "Progress updater completed at 100%, now starting LLM streaming..."
-          );
         } catch (err) {
           console.error("Progress updater failed:", err);
         }
@@ -223,19 +209,12 @@ export async function POST(req: Request) {
       stream,
       async consumeSseStream({ stream }) {
         try {
-          console.log(
-            `consumeSseStream called for session: ${sessionId} with streamId: ${streamId}`
-          );
-
           // CREATE RESUMABLE STREAM using the streamId we already saved
           const streamContext = createResumableStreamContext({
             waitUntil: after,
           });
 
           await streamContext.createNewResumableStream(streamId, () => stream);
-          console.log(
-            `Resumable stream created successfully with ID: ${streamId}`
-          );
         } catch (error) {
           console.error("Error in consumeSseStream:", error);
           // Clear the activeStreamId if stream creation fails
