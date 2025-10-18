@@ -27,6 +27,20 @@ const allSuggestions = [
   "Space exploration recent discoveries",
 ];
 
+const deepSearchSuggestions = [
+  "How to conduct effective deep web searches?",
+  "Tools for accessing the deep web",
+  "Understanding the dark web vs deep web",
+  "Best practices for online anonymity",
+  "How to find academic papers on the deep web",
+  "Techniques for advanced search queries",
+  "What are hidden services on the dark web?",
+  "Legal considerations when exploring the deep web",
+  "How to use Tor for deep web browsing",
+  "Finding niche communities on the deep web",
+  "Security tips for deep web users",
+];
+
 /**
  * Get a specified number of random suggestions from the pool
  * @param count Number of suggestions to return (default: 5)
@@ -58,4 +72,22 @@ export const getFilteredSuggestions = (filter?: string): string[] => {
   );
 
   return filtered.length > 0 ? filtered : getRandomSuggestions();
+};
+
+export const getDeepSearchSuggestions = (): string[] => {
+  return [...deepSearchSuggestions];
+};
+export const getRandomDeepSearchSuggestions = (count: number = 5): string[] => {
+  const shuffled = [...deepSearchSuggestions].sort(() => 0.5 - Math.random());
+  return shuffled.slice(0, count);
+};
+
+export const getFilteredDeepSearchSuggestions = (filter?: string): string[] => {
+  if (!filter) return getRandomDeepSearchSuggestions();
+
+  const filtered = deepSearchSuggestions.filter((suggestion) =>
+    suggestion.toLowerCase().includes(filter.toLowerCase())
+  );
+
+  return filtered.length > 0 ? filtered : getRandomDeepSearchSuggestions();
 };

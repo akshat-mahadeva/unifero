@@ -28,7 +28,7 @@ async function runProgressUpdater(
     Parameters<typeof createUIMessageStream>[0]["execute"]
   >[0]["writer"]
 ) {
-  const totalDuration = 10 * 60 * 1000; // 10 minutes
+  const totalDuration = 0.2 * 60 * 1000; // 12 seconds
   const updateInterval = 10 * 1000; // 10 seconds
   const steps = Math.floor(totalDuration / updateInterval);
 
@@ -168,8 +168,29 @@ export async function POST(req: Request) {
           messages: [...convertedMessages, { role: "user", content: prompt }],
         });
 
-        // Merge LLM stream with our custom stream
-        writer.merge(result.toUIMessageStream());
+        // 🔥 Manually stream text deltas to ensure correct message ID
+        let isFirstChunk = true;
+        for await (const chunk of result.textStream) {
+          if (isFirstChunk) {
+            writer.write({
+              type: "text-start",
+              id: assistantMessageId,
+            });
+            isFirstChunk = false;
+          }
+
+          writer.write({
+            type: "text-delta",
+            id: assistantMessageId,
+            delta: chunk,
+          });
+        }
+
+        // End the text stream
+        writer.write({
+          type: "text-end",
+          id: assistantMessageId,
+        });
       },
       onFinish: async ({ messages }) => {
         // Extract assistant text content

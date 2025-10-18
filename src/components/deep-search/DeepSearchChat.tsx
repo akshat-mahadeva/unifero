@@ -37,7 +37,7 @@ import { TextGenerateEffect } from "@/components/ui/text-generate-effect";
 import { useQueryClient } from "@tanstack/react-query";
 import { sessionKeys } from "@/hooks/use-sessions-query";
 import { usePathname } from "next/navigation";
-import { getRandomSuggestions } from "@/lib/get-suggestions";
+import { getRandomDeepSearchSuggestions } from "@/lib/get-suggestions";
 import { LoaderOne } from "../ui/loaders";
 import { ChatSDKError } from "@/lib/errors";
 import { Card, CardHeader } from "../ui/card";
@@ -78,7 +78,7 @@ const DeepSearchChat = ({
   // Initialize suggestions only on client side to avoid hydration mismatch
   useEffect(() => {
     if (isHomePage && initialMessages.length === 0) {
-      setSuggestions(getRandomSuggestions(5));
+      setSuggestions(getRandomDeepSearchSuggestions(5));
       setShowSuggestions(true);
     } else {
       setShowSuggestions(false);
@@ -225,31 +225,6 @@ const DeepSearchChat = ({
               <>
                 {/* Render actual messages */}
                 {messages.map((message) => {
-                  // Find the latest progress part (if any) for this message
-                  const progressParts = message.parts.filter(
-                    (part) => part.type === "data-deep-search-progress"
-                  );
-                  const latestProgress =
-                    progressParts.length > 0
-                      ? progressParts[progressParts.length - 1]
-                      : null;
-
-                  // Get text parts
-                  const textParts = message.parts.filter(
-                    (part) => part.type === "text"
-                  );
-
-                  // Type guard for progress data
-                  const progressData =
-                    latestProgress &&
-                    latestProgress.type === "data-deep-search-progress"
-                      ? (latestProgress.data as {
-                          progress: number;
-                          messageId: string;
-                          isDeepSearchInitiated?: boolean;
-                        })
-                      : null;
-
                   return (
                     <div key={message.id}>
                       <Message
@@ -257,54 +232,67 @@ const DeepSearchChat = ({
                         className="flex items-center gap-2 w-full"
                       >
                         <MessageContent>
-                          {/* Render progress card ONCE per message (latest progress) */}
-                          {progressData && (
-                            <Card
-                              className="py-4 rounded-sm bg-transparent mb-4"
-                              key={`${message.id}-progress-card`}
-                            >
-                              <CardHeader>
-                                <div className="flex items-center gap-2 justify-between">
-                                  <div className="text-sm">
-                                    {progressData.progress === 100
-                                      ? "Deep search completed"
-                                      : "Running deep search..."}
-                                    <span className="ml-2 font-medium">
-                                      {progressData.progress}%
-                                    </span>
-                                  </div>
-                                </div>
-                                <Separator className="my-2" />
-                                <Progress
-                                  value={progressData.progress}
-                                  className="mt-2"
-                                />
-                              </CardHeader>
-                            </Card>
-                          )}
+                          {/* Render progress card ONLY if there's progress and NO text content yet */}
 
                           {/* Render text parts */}
-                          {textParts.map((part, i) => {
-                            const text = part.text;
-
-                            return (
-                              <Fragment key={`${message.id}-text-${i}`}>
-                                <Response>{text}</Response>
-                                {message.role === "assistant" && (
-                                  <Actions className="mt-2">
-                                    <Action
-                                      onClick={() =>
-                                        navigator.clipboard.writeText(text)
-                                      }
-                                      label="Copy"
-                                    >
-                                      <CopyIcon className="size-3" />
-                                    </Action>
-                                  </Actions>
-                                )}
-                              </Fragment>
-                            );
+                          {message.parts.map((part, i) => {
+                            switch (part.type) {
+                              case "data-deep-search-progress":
+                                const progressData = part.data as {
+                                  progress: number;
+                                  messageId: string;
+                                  isDeepSearchInitiated: boolean;
+                                };
+                                return (
+                                  <Card
+                                    className="py-4 rounded-sm bg-transparent mb-4"
+                                    key={`${message.id}-progress-card`}
+                                  >
+                                    <CardHeader>
+                                      <div className="flex items-center gap-2 justify-between">
+                                        <div className="text-sm">
+                                          {progressData.progress === 100
+                                            ? "Deep search completed"
+                                            : "Running deep search..."}
+                                          <span className="ml-2 font-medium">
+                                            {progressData.progress}%{" "}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <Separator className="my-2" />
+                                      <Progress
+                                        value={progressData.progress}
+                                        className="mt-2"
+                                      />
+                                    </CardHeader>
+                                  </Card>
+                                );
+                              case "text":
+                                return (
+                                  <Response key={`${message.id}-${i}`}>
+                                    {part.text}
+                                  </Response>
+                                );
+                            }
                           })}
+
+                          {message.role === "assistant" && (
+                            <Actions className="mt-2">
+                              <Action
+                                onClick={() =>
+                                  navigator.clipboard.writeText(
+                                    message.parts
+                                      .filter((part) => part.type === "text")
+                                      .map((part) => part.text)
+                                      .join("\n")
+                                  )
+                                }
+                                label="Copy"
+                              >
+                                <CopyIcon className="size-3" />
+                              </Action>
+                            </Actions>
+                          )}
                         </MessageContent>
                       </Message>
                     </div>
@@ -333,7 +321,7 @@ const DeepSearchChat = ({
                     key={`${suggestion}-${index}`}
                     suggestion={suggestion}
                     onClick={handleSuggestionClick}
-                    className="whitespace-nowrap"
+                    className="whitespace-nowrap bg-transparent border text-sm "
                   />
                 ))}
               </Suggestions>
@@ -342,7 +330,7 @@ const DeepSearchChat = ({
 
         <PromptInput
           onSubmit={handleSubmit}
-          className="mt-4 p-1 border rounded-sm"
+          className="mt-4 p-1 border shadow-none rounded-sm"
           globalDrop
           multiple
         >

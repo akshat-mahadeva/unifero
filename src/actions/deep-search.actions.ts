@@ -6,26 +6,46 @@ import { Prisma } from "@/generated/prisma";
 import { DeepSearchToolResult } from "@/types/deep-search";
 import { UIMessage } from "ai";
 
-// Helper function to get authenticated user ID
-async function getUserIdOrThrow() {
+// ==================== HELPER FUNCTIONS ====================
+
+// Get authenticated user ID
+async function getUserIdOrThrow(): Promise<string> {
   const { userId } = await auth();
   if (!userId) throw new Error("Not authenticated");
   return userId;
 }
 
-// Helper function for error handling
+// Error handler
 function handleError(fnName: string, err: unknown): never {
-  console.error(`${fnName} error:`, err);
-  if (err instanceof Error) throw err;
-  throw new Error(String(err));
+  console.error(`[${fnName}]`, err);
+  throw err instanceof Error ? err : new Error(String(err));
 }
 
-// ==================== SESSION ACTIONS ====================
+// Verify session ownership (reusable)
+async function verifySessionOwnership(sessionId: string, userId: string) {
+  const session = await prisma.deepSearchSession.findUnique({
+    where: { id: sessionId },
+    select: { userId: true },
+  });
+
+  if (!session) throw new Error("Session not found");
+  if (session.userId !== userId) throw new Error("Not authorized");
+}
+
+// Extract text content from UI message parts
+function extractTextContent(parts: UIMessage["parts"]): string {
+  return parts
+    .filter((part) => part.type === "text")
+    .map((part) => (part.type === "text" && "text" in part ? part.text : ""))
+    .join("\n");
+}
+
+// ==================== READ OPERATIONS ====================
 
 export async function getDeepSearchSessions() {
   try {
     const userId = await getUserIdOrThrow();
-    const sessions = await prisma.deepSearchSession.findMany({
+    return await prisma.deepSearchSession.findMany({
       where: { userId },
       orderBy: { updatedAt: "desc" },
       include: {
@@ -35,7 +55,6 @@ export async function getDeepSearchSessions() {
         },
       },
     });
-    return sessions;
   } catch (err) {
     handleError("getDeepSearchSessions", err);
   }
@@ -60,10 +79,7 @@ export async function getDeepSearchSessionById(sessionId: string) {
       },
     });
 
-    if (!session) {
-      throw new Error("Session not found or access denied");
-    }
-
+    if (!session) throw new Error("Session not found or access denied");
     return session;
   } catch (err) {
     handleError("getDeepSearchSessionById", err);
@@ -79,101 +95,59 @@ export async function getOrCreateDeepSearchSessionById(
 
     const userId = await getUserIdOrThrow();
 
-    let session = await prisma.deepSearchSession.findUnique({
-      where: { id: sessionId },
-      include: {
-        messages: {
-          include: {
-            DeepSearchToolSnapshot: true,
-          },
-          orderBy: {
-            createdAt: "asc",
-          },
+    const includeMessages = {
+      messages: {
+        include: {
+          DeepSearchToolSnapshot: true,
         },
+        orderBy: { createdAt: "asc" as const },
       },
+    };
+
+    // Try to find existing session
+    const existingSession = await prisma.deepSearchSession.findUnique({
+      where: { id: sessionId },
+      include: includeMessages,
     });
 
-    if (session) {
-      // Verify ownership
-      if (session.userId !== userId) {
-        throw new Error("Not authorized to access this session");
-      }
-      return session;
+    if (existingSession) {
+      if (existingSession.userId !== userId) throw new Error("Not authorized");
+      return existingSession;
     }
 
     // Create new session
-    session = await prisma.deepSearchSession.create({
+    return await prisma.deepSearchSession.create({
       data: {
         id: sessionId,
         userId,
         title: title || "New Deep Search",
       },
-      include: {
-        messages: {
-          include: {
-            DeepSearchToolSnapshot: true,
-          },
-        },
-      },
+      include: includeMessages,
     });
-
-    return session;
   } catch (err) {
     handleError("getOrCreateDeepSearchSessionById", err);
   }
 }
 
+// ==================== CREATE OPERATIONS ====================
+
 export async function createDeepSearchSession(opts: { title?: string } = {}) {
   try {
     const userId = await getUserIdOrThrow();
-
-    const session = await prisma.deepSearchSession.create({
+    return await prisma.deepSearchSession.create({
       data: {
         userId,
         title: opts.title || "New Deep Search",
       },
     });
-
-    return session;
   } catch (err) {
     handleError("createDeepSearchSession", err);
   }
 }
 
-export async function updateDeepSearchSessionTitle(
-  sessionId: string,
-  title: string
-) {
-  try {
-    if (!sessionId) throw new Error("sessionId is required");
-    if (!title) throw new Error("title is required");
+// ==================== UPDATE OPERATIONS ====================
 
-    const userId = await getUserIdOrThrow();
-
-    // Verify ownership
-    const existing = await prisma.deepSearchSession.findUnique({
-      where: { id: sessionId },
-    });
-
-    if (!existing) {
-      throw new Error("Session not found");
-    }
-
-    if (existing.userId !== userId) {
-      throw new Error("Not authorized to update this session");
-    }
-
-    const session = await prisma.deepSearchSession.update({
-      where: { id: sessionId },
-      data: { title },
-    });
-
-    return session;
-  } catch (err) {
-    handleError("updateDeepSearchSessionTitle", err);
-  }
-}
-
+// Combined update function (replaces updateDeepSearchSessionTitle)
 export async function updateDeepSearchSession(
   sessionId: string,
   data: { title?: string }
@@ -182,49 +156,25 @@ export async function updateDeepSearchSession(
     if (!sessionId) throw new Error("sessionId is required");
 
     const userId = await getUserIdOrThrow();
+    await verifySessionOwnership(sessionId, userId);
 
-    // Verify ownership
-    const existing = await prisma.deepSearchSession.findUnique({
-      where: { id: sessionId },
-    });
-
-    if (!existing) {
-      throw new Error("Session not found");
-    }
-
-    if (existing.userId !== userId) {
-      throw new Error("Not authorized to update this session");
-    }
-
-    const session = await prisma.deepSearchSession.update({
+    return await prisma.deepSearchSession.update({
       where: { id: sessionId },
       data: data as Prisma.DeepSearchSessionUpdateInput,
     });
-
-    return session;
   } catch (err) {
     handleError("updateDeepSearchSession", err);
   }
 }
+
+// ==================== DELETE OPERATIONS ====================
 
 export async function deleteDeepSearchSession(sessionId: string) {
   try {
     if (!sessionId) throw new Error("sessionId is required");
 
     const userId = await getUserIdOrThrow();
-
-    // Verify ownership
-    const existing = await prisma.deepSearchSession.findUnique({
-      where: { id: sessionId },
-    });
-
-    if (!existing) {
-      throw new Error("Session not found");
-    }
-
-    if (existing.userId !== userId) {
-      throw new Error("Not authorized to delete this session");
-    }
+    await verifySessionOwnership(sessionId, userId);
 
     await prisma.deepSearchSession.delete({
       where: { id: sessionId },
@@ -239,39 +189,25 @@ export async function deleteDeepSearchSession(sessionId: string) {
 export async function deleteAllDeepSearchSessions() {
   try {
     const userId = await getUserIdOrThrow();
-
     const result = await prisma.deepSearchSession.deleteMany({
       where: { userId },
     });
-
     return { success: true, count: result.count };
   } catch (err) {
     handleError("deleteAllDeepSearchSessions", err);
   }
 }
 
-// ==================== MESSAGE ACTIONS ====================
+// ==================== MESSAGE OPERATIONS ====================
 
 export async function getDeepSearchSessionMessages(sessionId: string) {
   try {
     if (!sessionId) throw new Error("sessionId is required");
 
     const userId = await getUserIdOrThrow();
+    await verifySessionOwnership(sessionId, userId);
 
-    // Verify session ownership
-    const session = await prisma.deepSearchSession.findUnique({
-      where: { id: sessionId },
-    });
-
-    if (!session) {
-      throw new Error("Session not found");
-    }
-
-    if (session.userId !== userId) {
-      throw new Error("Not authorized to access this session");
-    }
-
-    const messages = await prisma.deepSearchMessage.findMany({
+    return await prisma.deepSearchMessage.findMany({
       where: { sessionId },
       include: {
         DeepSearchToolSnapshot: true,
@@ -280,8 +216,6 @@ export async function getDeepSearchSessionMessages(sessionId: string) {
         createdAt: "asc",
       },
     });
-
-    return messages;
   } catch (err) {
     handleError("getDeepSearchSessionMessages", err);
   }
@@ -293,7 +227,6 @@ export async function getDeepSearchMessageById(messageId: string) {
 
     const userId = await getUserIdOrThrow();
 
-    // Get message with session and all session messages to verify ownership
     const message = await prisma.deepSearchMessage.findUnique({
       where: { id: messageId },
       include: {
@@ -313,13 +246,8 @@ export async function getDeepSearchMessageById(messageId: string) {
       },
     });
 
-    if (!message) {
-      throw new Error("Message not found");
-    }
-
-    if (message.session.userId !== userId) {
-      throw new Error("Not authorized to access this message");
-    }
+    if (!message) throw new Error("Message not found");
+    if (message.session.userId !== userId) throw new Error("Not authorized");
 
     return message;
   } catch (err) {
@@ -333,19 +261,13 @@ export async function deleteDeepSearchMessage(messageId: string) {
 
     const userId = await getUserIdOrThrow();
 
-    // Verify message ownership via session
     const existing = await prisma.deepSearchMessage.findUnique({
       where: { id: messageId },
       include: { session: true },
     });
 
-    if (!existing) {
-      throw new Error("Message not found");
-    }
-
-    if (existing.session.userId !== userId) {
-      throw new Error("Not authorized to delete this message");
-    }
+    if (!existing) throw new Error("Message not found");
+    if (existing.session.userId !== userId) throw new Error("Not authorized");
 
     await prisma.deepSearchMessage.delete({
       where: { id: messageId },
@@ -362,19 +284,7 @@ export async function deleteDeepSearchSessionMessages(sessionId: string) {
     if (!sessionId) throw new Error("sessionId is required");
 
     const userId = await getUserIdOrThrow();
-
-    // Verify session ownership
-    const session = await prisma.deepSearchSession.findUnique({
-      where: { id: sessionId },
-    });
-
-    if (!session) {
-      throw new Error("Session not found");
-    }
-
-    if (session.userId !== userId) {
-      throw new Error("Not authorized to delete messages from this session");
-    }
+    await verifySessionOwnership(sessionId, userId);
 
     const result = await prisma.deepSearchMessage.deleteMany({
       where: { sessionId },
@@ -386,31 +296,17 @@ export async function deleteDeepSearchSessionMessages(sessionId: string) {
   }
 }
 
-// actions/deep-search.actions.ts
-
 export async function saveDeepSearchMessagesToSession(
   sessionId: string,
   messages: UIMessage[],
   toolResults?: DeepSearchToolResult[],
-  assistantMessageId?: string // Add this parameter
+  assistantMessageId?: string
 ) {
   try {
     if (!sessionId) throw new Error("sessionId is required");
 
     const userId = await getUserIdOrThrow();
-
-    // Verify session ownership
-    const session = await prisma.deepSearchSession.findUnique({
-      where: { id: sessionId },
-    });
-
-    if (!session) {
-      throw new Error("Session not found");
-    }
-
-    if (session.userId !== userId) {
-      throw new Error("Not authorized to save messages to this session");
-    }
+    await verifySessionOwnership(sessionId, userId);
 
     // Update session's updatedAt
     await prisma.deepSearchSession.update({
@@ -422,24 +318,13 @@ export async function saveDeepSearchMessagesToSession(
 
     // Save messages
     for (const message of messages) {
-      // Check if message already exists
       const existingMessage = await prisma.deepSearchMessage.findUnique({
         where: { id: message.id },
       });
 
       if (!existingMessage) {
-        // Extract text content from message parts
-        const textContent = message.parts
-          .filter((part) => part.type === "text")
-          .map((part) => {
-            if (part.type === "text" && "text" in part) {
-              return part.text;
-            }
-            return "";
-          })
-          .join("\n");
+        const textContent = extractTextContent(message.parts);
 
-        // Create new message
         const savedMessage = await prisma.deepSearchMessage.create({
           data: {
             id: message.id,
@@ -449,22 +334,13 @@ export async function saveDeepSearchMessagesToSession(
           },
         });
 
-        // Keep track of the assistant message ID for tool snapshots
         if (message.role === "assistant" && !messageIdForToolSnapshots) {
           messageIdForToolSnapshots = savedMessage.id;
         }
       } else {
-        // Update existing message content if it's the assistant message we created earlier
+        // Update existing assistant message content
         if (message.role === "assistant" && message.id === assistantMessageId) {
-          const textContent = message.parts
-            .filter((part) => part.type === "text")
-            .map((part) => {
-              if (part.type === "text" && "text" in part) {
-                return part.text;
-              }
-              return "";
-            })
-            .join("\n");
+          const textContent = extractTextContent(message.parts);
 
           await prisma.deepSearchMessage.update({
             where: { id: message.id },
@@ -472,7 +348,6 @@ export async function saveDeepSearchMessagesToSession(
           });
         }
 
-        // If this is an existing assistant message, we can still use it for tool snapshots
         if (
           existingMessage.role === "assistant" &&
           !messageIdForToolSnapshots
@@ -537,8 +412,6 @@ export async function createAssistantMessage(
   });
 }
 
-// Update progress for a DeepSearchMessage (percentage 0-100).
-// Ensures the caller is authenticated and owns the session.
 export async function updateDeepSearchMessageProgress(
   sessionId: string,
   messageId: string,
@@ -550,21 +423,8 @@ export async function updateDeepSearchMessageProgress(
     if (!messageId) throw new Error("messageId is required");
 
     const userId = await getUserIdOrThrow();
+    await verifySessionOwnership(sessionId, userId);
 
-    // Verify session ownership
-    const session = await prisma.deepSearchSession.findUnique({
-      where: { id: sessionId },
-    });
-
-    if (!session) {
-      throw new Error("Session not found");
-    }
-
-    if (session.userId !== userId) {
-      throw new Error("Not authorized to update messages in this session");
-    }
-
-    // Clamp progress
     const clamped = Math.max(0, Math.min(100, Math.floor(progress)));
 
     const updated = await prisma.deepSearchMessage.update({
@@ -582,8 +442,6 @@ export async function updateDeepSearchMessageProgress(
   }
 }
 
-// actions/deep-search.actions.ts (add this function)
-
 export async function updateAssistantMessageContent(
   messageId: string,
   content: string
@@ -593,19 +451,13 @@ export async function updateAssistantMessageContent(
 
     const userId = await getUserIdOrThrow();
 
-    // Verify message ownership via session
     const existing = await prisma.deepSearchMessage.findUnique({
       where: { id: messageId },
       include: { session: true },
     });
 
-    if (!existing) {
-      throw new Error("Message not found");
-    }
-
-    if (existing.session.userId !== userId) {
-      throw new Error("Not authorized to update this message");
-    }
+    if (!existing) throw new Error("Message not found");
+    if (existing.session.userId !== userId) throw new Error("Not authorized");
 
     const updated = await prisma.deepSearchMessage.update({
       where: { id: messageId },
@@ -621,21 +473,15 @@ export async function updateAssistantMessageContent(
   }
 }
 
-// Save active stream ID when starting deep search
+// ==================== STREAM OPERATIONS ====================
+
 export async function updateActiveStreamId(
   sessionId: string,
   activeStreamId: string | null
 ) {
   try {
     const userId = await getUserIdOrThrow();
-
-    const session = await prisma.deepSearchSession.findUnique({
-      where: { id: sessionId },
-    });
-
-    if (!session || session.userId !== userId) {
-      throw new Error("Not authorized");
-    }
+    await verifySessionOwnership(sessionId, userId);
 
     await prisma.deepSearchSession.update({
       where: { id: sessionId },
@@ -651,18 +497,10 @@ export async function updateActiveStreamId(
   }
 }
 
-// Mark stream as canceled
 export async function cancelDeepSearchStream(sessionId: string) {
   try {
     const userId = await getUserIdOrThrow();
-
-    const session = await prisma.deepSearchSession.findUnique({
-      where: { id: sessionId },
-    });
-
-    if (!session || session.userId !== userId) {
-      throw new Error("Not authorized");
-    }
+    await verifySessionOwnership(sessionId, userId);
 
     await prisma.deepSearchSession.update({
       where: { id: sessionId },
