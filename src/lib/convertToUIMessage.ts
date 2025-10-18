@@ -86,17 +86,17 @@ export const convertToDeepSearchUIMessages = (
       isDeepSearchInitiated: m.isDeepSearchInitiated ?? false,
     },
     parts: [
-      ...(m.isDeepSearchInitiated
-        ? [
-            {
-              type: "data-deep-search-progress",
-              data: {
-                progress: m.progress ?? 0,
-                isDeepSearchInitiated: m.isDeepSearchInitiated ?? false,
-              },
-            },
-          ]
-        : []),
+      // ...(m.isDeepSearchInitiated
+      //   ? [
+      {
+        type: "data-deep-search-progress",
+        data: {
+          progress: m.progress ?? 0,
+          isDeepSearchInitiated: m.isDeepSearchInitiated ?? false,
+        },
+      },
+      //   ]
+      // : []),
       {
         type: "text" as const,
         text: m.content ?? "",

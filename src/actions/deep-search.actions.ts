@@ -416,7 +416,8 @@ export async function updateDeepSearchMessageProgress(
   sessionId: string,
   messageId: string,
   progress: number,
-  completed?: boolean
+  completed?: boolean,
+  enableDeepSearch?: boolean
 ) {
   try {
     if (!sessionId) throw new Error("sessionId is required");
@@ -433,6 +434,7 @@ export async function updateDeepSearchMessageProgress(
         progress: clamped,
         completed: typeof completed === "boolean" ? completed : undefined,
         updatedAt: new Date(),
+        isDeepSearchInitiated: enableDeepSearch ? true : undefined,
       },
     });
 

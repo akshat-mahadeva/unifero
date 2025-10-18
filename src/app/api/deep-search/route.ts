@@ -15,10 +15,38 @@ import {
   generateId,
   createUIMessageStream,
   createUIMessageStreamResponse,
+  generateObject,
 } from "ai";
 import { createResumableStreamContext } from "resumable-stream";
 import { after } from "next/server";
 import { DeepSearchUIMessage } from "@/types/deep-search";
+
+// Define the Zod schema for the evaluation output
+import { z } from "zod";
+
+export const EvaluationSchema = z.object({
+  // Sentiment classification
+  sentiment: z
+    .enum(["positive", "neutral", "negative"])
+    .describe("Overall sentiment of the user query."),
+  // The crucial routing decision
+  isDeepSearchRequired: z
+    .boolean()
+    .describe(
+      "True if the query requires external research (e.g., questions about current events, detailed analysis, comparisons). False if it is a simple chat, joke, or direct question."
+    ),
+  // A brief summary of the user's intent for logging
+  intentSummary: z
+    .string()
+    .describe("A one-sentence summary of the user's goal or question."),
+  normalReply: z
+    .string()
+    .describe(
+      "A normal reply to the user's prompt if deep search is not required or ask for more information to deep search."
+    ),
+});
+
+export type EvaluationResult = z.infer<typeof EvaluationSchema>;
 
 // Background worker that updates progress and streams to client
 async function runProgressUpdater(
@@ -28,7 +56,7 @@ async function runProgressUpdater(
     Parameters<typeof createUIMessageStream>[0]["execute"]
   >[0]["writer"]
 ) {
-  const totalDuration = 0.2 * 60 * 1000; // 12 seconds
+  const totalDuration = 2 * 60 * 1000; // 2 minutes
   const updateInterval = 10 * 1000; // 10 seconds
   const steps = Math.floor(totalDuration / updateInterval);
 
@@ -43,10 +71,8 @@ async function runProgressUpdater(
         sessionId,
         messageId,
         progress,
-        false // not completed
+        false
       );
-
-      console.log(`Database updated: ${progress}% for message ${messageId}`);
 
       // Stream progress update to client
       writer.write({
@@ -79,8 +105,6 @@ async function runProgressUpdater(
       isDeepSearchInitiated: true,
     },
   });
-
-  console.log(`Progress completed: 100% for message ${messageId}`);
 }
 
 export async function POST(req: Request) {
@@ -110,7 +134,7 @@ export async function POST(req: Request) {
     // Create assistant message SECOND (so we have a DB ID)
     const assistantMessage = await createAssistantMessage(
       sessionId,
-      true // isDeepSearchInitiated = true
+      false // isDeepSearchInitiated = false
     );
 
     const assistantMessageId = assistantMessage.id;
@@ -129,6 +153,30 @@ export async function POST(req: Request) {
     const stream = createUIMessageStream<DeepSearchUIMessage>({
       generateId: () => assistantMessageId,
       execute: async ({ writer }) => {
+        const { object: evaluation } = await generateObject({
+          model: openai("gpt-4o-mini"), // Use a cheap model for fast routing
+          system: `Analyze the user prompt to determine if external deep research is required and classify its sentiment.`,
+          prompt: prompt,
+          schema: EvaluationSchema,
+        });
+
+        const needsDeepSearch = evaluation.isDeepSearchRequired;
+
+        // Quick exit if deep search is not needed
+        if (!needsDeepSearch) {
+          writer.write({
+            type: "text-start",
+            id: assistantMessageId,
+          });
+          writer.write({
+            type: "text-delta",
+            id: assistantMessageId,
+            delta: evaluation.normalReply,
+          });
+          writer.write({ type: "text-end", id: assistantMessageId });
+          return;
+        }
+
         // Send initial progress update
         writer.write({
           type: "data-deep-search-progress",
@@ -139,6 +187,15 @@ export async function POST(req: Request) {
             isDeepSearchInitiated: true,
           },
         });
+
+        // update the assistant message to indicate deep search has started
+        await updateDeepSearchMessageProgress(
+          sessionId,
+          assistantMessageId,
+          0,
+          false,
+          true // isDeepSearchInitiated = true
+        );
 
         // 🔥 WAIT for progress updater to complete FIRST (reaches 100%)
         try {

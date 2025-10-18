@@ -240,6 +240,7 @@ const DeepSearchChat = ({
                                   messageId: string;
                                   isDeepSearchInitiated: boolean;
                                 };
+                                if (message.role !== "assistant") return null;
                                 return (
                                   <Card
                                     className="py-4 rounded-sm bg-transparent mb-4"
