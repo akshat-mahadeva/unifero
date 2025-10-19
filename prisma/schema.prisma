@@ -52,14 +52,20 @@ model ToolSnapshot {
   @@index([messageId])
 }
 
+enum Role {
+  user
+  assistant
+  system
+}
+
 model DeepSearchSession {
   id             String              @id @default(cuid())
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
   userId         String?
   title          String?
-  activeStreamId String? // 🔥 Track active stream
-  canceledAt     DateTime? // 🔥 Track cancellation
+  activeStreamId String?
+  canceledAt     DateTime?
   messages       DeepSearchMessage[]
 }
 
@@ -75,6 +81,7 @@ model DeepSearchMessage {
   completed              Boolean                  @default(false)
   session                DeepSearchSession        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   DeepSearchToolSnapshot DeepSearchToolSnapshot[]
+  DeepSearchStep         DeepSearchStep[]
 
   @@index([sessionId])
 }
@@ -93,13 +100,29 @@ model DeepSearchToolSnapshot {
   @@index([messageId])
 }
 
-enum DeepSearchRole {
-  user
-  assistant
-  system
+model DeepSearchStep {
+  id                String             @id @default(cuid())
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  stepName          String
+  isExecuted        Boolean            @default(false)
+  input             Json
+  output            Json
+  type              DeepSearchStepType @default(analyze)
+  deepSearchMsgId   String
+  deepSearchMessage DeepSearchMessage  @relation(fields: [deepSearchMsgId], references: [id], onDelete: Cascade)
+
+  @@index([deepSearchMsgId])
 }
 
-enum Role {
+enum DeepSearchStepType {
+  search
+  analyze
+  evaluate
+  report
+}
+
+enum DeepSearchRole {
   user
   assistant
   system

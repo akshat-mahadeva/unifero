@@ -44,6 +44,7 @@ import { Card, CardHeader } from "../ui/card";
 import { Progress } from "../ui/progress";
 import { DeepSearchUIMessage } from "@/types/deep-search";
 import { Separator } from "../ui/separator";
+import { Tool, ToolHeader } from "../ai-elements/tool";
 
 const DeepSearchChat = ({
   sessionId,
@@ -72,10 +73,8 @@ const DeepSearchChat = ({
     }
   };
 
-  // Dynamically determine if we're on the home page
   const isHomePage = pathname === "/" || pathname === "/deep-search";
 
-  // Initialize suggestions only on client side to avoid hydration mismatch
   useEffect(() => {
     if (isHomePage && initialMessages.length === 0) {
       setSuggestions(getRandomDeepSearchSuggestions(5));
@@ -127,16 +126,7 @@ const DeepSearchChat = ({
       },
     }),
     messages: initialMessages,
-    resume: !isHomePage, // Always enable resume (removed condition)
-    onData: (dataPart) => {
-      // Clear suggestions when user starts receiving data
-      if (showSuggestions) {
-        setShowSuggestions(false);
-      }
-
-      // Debug log all streaming data
-      console.log("Streaming data received:", dataPart);
-    },
+    resume: !isHomePage,
     onFinish: () => {
       if (
         window.location.pathname === "/" ||
@@ -161,7 +151,6 @@ const DeepSearchChat = ({
     },
   });
 
-  // Auto-scroll when messages change or when status updates
   useEffect(() => {
     scrollToBottom();
   }, [messages.length, status]);
@@ -176,7 +165,7 @@ const DeepSearchChat = ({
 
     sendMessage({
       text: message.text || "Sent with attachments",
-      files: message.files,
+      // files: message.files,
     });
     setInput("");
     setShowSuggestions(false);
@@ -185,7 +174,7 @@ const DeepSearchChat = ({
   const handleSuggestionClick = (suggestion: string) => {
     sendMessage({
       text: suggestion,
-      files: [],
+      // files: [],
     });
     setInput("");
     setShowSuggestions(false);
@@ -232,47 +221,69 @@ const DeepSearchChat = ({
                         className="flex items-center gap-2 w-full"
                       >
                         <MessageContent>
-                          {message.parts.map((part, i) => {
-                            switch (part.type) {
-                              case "data-deep-search-progress":
-                                const progressData = part.data as {
-                                  progress: number;
-                                  messageId: string;
-                                  isDeepSearchInitiated: boolean;
-                                };
-                                if (message.role !== "assistant") return null;
-                                return (
-                                  <Card
-                                    className="py-4 rounded-sm bg-transparent mb-4"
-                                    key={`${message.id}-progress-card`}
-                                  >
-                                    <CardHeader>
-                                      <div className="flex items-center gap-2 justify-between">
-                                        <div className="text-sm">
-                                          {progressData.progress === 100
-                                            ? "Deep search completed"
-                                            : "Running deep search..."}
-                                          <span className="ml-2 font-medium">
-                                            {progressData.progress}%{" "}
-                                          </span>
+                          {(() => {
+                            const progressParts = message.parts.filter(
+                              (p) => p.type === "data-deepSearchDataPart"
+                            );
+                            const latestProgress =
+                              progressParts.length > 0
+                                ? progressParts[progressParts.length - 1]
+                                : null;
+
+                            return (
+                              <>
+                                {latestProgress &&
+                                  message.role === "assistant" && (
+                                    <Card
+                                      className="py-4 rounded-sm bg-transparent mb-4"
+                                      key={`${message.id}-progress-card`}
+                                    >
+                                      <CardHeader>
+                                        <div className="flex items-center gap-2 justify-between">
+                                          <div className="text-sm">
+                                            {latestProgress.data.progress ===
+                                            100
+                                              ? "Deep search completed"
+                                              : "Running deep search..."}
+                                            <span className="ml-2 font-medium">
+                                              {latestProgress.data.progress}%
+                                            </span>
+                                          </div>
                                         </div>
-                                      </div>
-                                      <Separator className="my-2" />
-                                      <Progress
-                                        value={progressData.progress}
-                                        className="mt-2"
-                                      />
-                                    </CardHeader>
-                                  </Card>
-                                );
-                              case "text":
-                                return (
-                                  <Response key={`${message.id}-${i}`}>
-                                    {part.text}
-                                  </Response>
-                                );
-                            }
-                          })}
+                                        <Separator className="my-2" />
+                                        <Progress
+                                          value={latestProgress.data.progress}
+                                          className="mt-2"
+                                        />
+                                      </CardHeader>
+                                    </Card>
+                                  )}
+                                {message.parts.map((part, i) => {
+                                  if (part.type === "tool-runCode") {
+                                    return (
+                                      <Tool
+                                        key={`${message.id}-${i}`}
+                                        defaultOpen={true}
+                                      >
+                                        <ToolHeader
+                                          type={part.type}
+                                          state={part.state}
+                                        />
+                                      </Tool>
+                                    ); // Skip rendering progress parts here
+                                  }
+                                  if (part.type === "text") {
+                                    return (
+                                      <Response key={`${message.id}-${i}`}>
+                                        {part.text}
+                                      </Response>
+                                    );
+                                  }
+                                  return null;
+                                })}
+                              </>
+                            );
+                          })()}
 
                           {message.role === "assistant" && (
                             <Actions className="mt-2">
@@ -319,7 +330,7 @@ const DeepSearchChat = ({
                     key={`${suggestion}-${index}`}
                     suggestion={suggestion}
                     onClick={handleSuggestionClick}
-                    className="whitespace-nowrap bg-transparent border text-sm "
+                    className="whitespace-nowrap bg-transparent border text-xs "
                   />
                 ))}
               </Suggestions>

@@ -1,15 +1,14 @@
 "use client";
 
+import { Response } from "@/components/ai-elements/response";
 import {
   Tool,
   ToolHeader,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  ToolOutput,
   // ToolInput,
   // ToolOutput,
 } from "@/components/ai-elements/tool";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { Card, CardTitle } from "@/components/ui/card";
 import { ToolUIPart } from "ai";
 import { Search } from "lucide-react";
 import Link from "next/link";
@@ -69,15 +68,15 @@ export const WebSearchUIRenderer = ({
               result.sources?.map((source: WebSearchSource, sIndex: number) => (
                 <Card
                   key={`${rIndex}-${sIndex}`}
-                  className="p-3 flex flex-row items-center gap-3 bg-transparent"
+                  className="p-3 flex flex-row items-center rounded-md gap-3 bg-transparent"
                 >
-                  <Avatar className="h-18 w-18 flex-shrink-0 rounded-md">
+                  <Avatar className="h-18 w-18 flex-shrink-0 rounded-none">
                     <AvatarImage
                       src={source.image}
                       alt={source.title}
-                      className="rounded-md object-cover"
+                      className="rounded-sm object-cover"
                     />
-                    <AvatarFallback className="rounded-md">
+                    <AvatarFallback className="rounded-sm">
                       {source.title.slice(0, 2)}
                     </AvatarFallback>
                   </Avatar>
@@ -85,10 +84,9 @@ export const WebSearchUIRenderer = ({
                     <Link href={source.url}>
                       <CardTitle className=" text-sm">{source.title}</CardTitle>
                     </Link>
-                    <CardDescription>
-                      {source.text.slice(0, 200)}
-                      {source.text.length > 200 ? "..." : ""}
-                    </CardDescription>
+                    <Response className=" text-sm text-muted-foreground">
+                      {source.text.replace(/\n/g, "").slice(0, 200)}
+                    </Response>
                   </div>
                 </Card>
               ))

@@ -21,3 +21,14 @@ export function sanitizeMessages(messages: DBMessage[]) {
     })) as UIMessage[];
   return safeMessages;
 }
+
+export const extractTextFromMessage = (message: UIMessage): string => {
+  return message.parts
+    .map((part) => {
+      if (part.type === "text" && "text" in part) {
+        return part.text;
+      }
+      return "";
+    })
+    .join("\n");
+};

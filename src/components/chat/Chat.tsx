@@ -87,7 +87,7 @@ const Chat = ({
 
   const { messages, sendMessage, status } = useChat({
     transport: new DefaultChatTransport({
-      api: "/api/deep-search",
+      api: "/api/chat",
       prepareSendMessagesRequest: (request) => {
         // Get the prompt from the message being sent
         const lastMessage = request.messages[request.messages.length - 1];
@@ -278,7 +278,7 @@ const Chat = ({
                     key={`${suggestion}-${index}`}
                     suggestion={suggestion}
                     onClick={handleSuggestionClick}
-                    className="whitespace-nowrap"
+                    className="whitespace-nowrap bg-transparent border text-xs"
                   />
                 ))}
               </Suggestions>
@@ -287,7 +287,7 @@ const Chat = ({
 
         <PromptInput
           onSubmit={handleSubmit}
-          className="mt-4 p-1 bg-popover dark:border-none shadow-none "
+          className="mt-4 p-1 rounded-sm border  shadow-none "
           globalDrop
           multiple
         >

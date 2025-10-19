@@ -3,7 +3,7 @@
 import prisma from "@/lib/db";
 import { auth } from "@clerk/nextjs/server";
 import { Prisma } from "@/generated/prisma";
-import { DeepSearchToolResult } from "@/types/deep-search";
+import { DeepSearchToolResult, DeepSearchStepType } from "@/types/deep-search";
 import { UIMessage } from "ai";
 
 // ==================== HELPER FUNCTIONS ====================
@@ -517,3 +517,77 @@ export async function cancelDeepSearchStream(sessionId: string) {
     handleError("cancelDeepSearchStream", err);
   }
 }
+
+export const createDeepSearchStep = async ({
+  sessionId,
+  messageId,
+  stepType,
+  reasoningText,
+  executed,
+  input,
+  output,
+}: {
+  sessionId: string;
+  messageId: string;
+  stepType: DeepSearchStepType;
+  reasoningText?: string;
+  executed: boolean;
+  input?: Prisma.InputJsonValue;
+  output?: Prisma.InputJsonValue;
+}) => {
+  try {
+    const userId = await getUserIdOrThrow();
+    await verifySessionOwnership(sessionId, userId);
+
+    // Verify message exists
+    const message = await prisma.deepSearchMessage.findUnique({
+      where: { id: messageId, sessionId },
+    });
+
+    if (!message) throw new Error("Message not found");
+
+    return await prisma.deepSearchStep.create({
+      data: {
+        stepName: reasoningText || stepType,
+        isExecuted: executed,
+        input: input ?? Prisma.JsonNull,
+        output: output ?? Prisma.JsonNull,
+        type: stepType,
+        deepSearchMsgId: messageId,
+      },
+    });
+  } catch (err) {
+    handleError("createDeepSearchStep", err);
+  }
+};
+
+export const updateDeepSearchStepExecution = async (
+  stepId: string,
+  executed: boolean
+) => {
+  try {
+    const step = await prisma.deepSearchStep.findUnique({
+      where: { id: stepId },
+      include: {
+        deepSearchMessage: {
+          include: {
+            session: true,
+          },
+        },
+      },
+    });
+
+    if (!step) throw new Error("Step not found");
+
+    const userId = await getUserIdOrThrow();
+    if (step.deepSearchMessage.session.userId !== userId)
+      throw new Error("Not authorized");
+
+    return await prisma.deepSearchStep.update({
+      where: { id: stepId },
+      data: { isExecuted: executed, updatedAt: new Date() },
+    });
+  } catch (err) {
+    handleError("updateDeepSearchStepExecution", err);
+  }
+};
