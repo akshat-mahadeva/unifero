@@ -40,7 +40,7 @@ import { usePathname } from "next/navigation";
 import { getRandomDeepSearchSuggestions } from "@/lib/get-suggestions";
 import { LoaderOne } from "../ui/loaders";
 import { ChatSDKError } from "@/lib/errors";
-import { Card, CardHeader } from "../ui/card";
+import { Card, CardContent, CardHeader } from "../ui/card";
 import { Progress } from "../ui/progress";
 import { DeepSearchUIMessage } from "@/types/deep-search";
 import { Separator } from "../ui/separator";
@@ -269,6 +269,33 @@ const DeepSearchChat = ({
                                                 {latestProgress.data.progress}%
                                               </span>
                                             </div>
+
+                                            {/* Showing the copy report button */}
+                                            {latestProgress.data.progress ===
+                                              100 && (
+                                              <Button
+                                                size={"sm"}
+                                                variant={"outline"}
+                                                onClick={() =>
+                                                  navigator.clipboard.writeText(
+                                                    message.parts
+                                                      .filter(
+                                                        (part) =>
+                                                          part.type ===
+                                                          "data-deepSearchReportPart"
+                                                      )
+                                                      .map(
+                                                        (part) =>
+                                                          part.data.reportText
+                                                      )
+                                                      .join("\n")
+                                                  )
+                                                }
+                                              >
+                                                <CopyIcon className="size-3" />
+                                                <span>Copy Report</span>
+                                              </Button>
+                                            )}
                                           </div>
 
                                           <Sheet
@@ -335,6 +362,40 @@ const DeepSearchChat = ({
                                           className="mt-2"
                                         />
                                       </CardHeader>
+                                      <CardContent>
+                                        {latestProgressPart?.data
+                                          ?.isDeepSearchInitiated &&
+                                          !(
+                                            latestProgress.data.progress === 100
+                                          ) && (
+                                            <Response className="text-sm text-muted-foreground animate-pulse">
+                                              {latestProgressPart.data.text}
+                                            </Response>
+                                          )}
+
+                                        {/* If any of the parts are data-deepSearchReportPart */}
+                                        {message.parts.some(
+                                          (part) =>
+                                            part.type ===
+                                            "data-deepSearchReportPart"
+                                        ) && <Separator className="my-2" />}
+
+                                        {message.parts.map((part, i) => {
+                                          if (
+                                            part.type ===
+                                            "data-deepSearchReportPart"
+                                          ) {
+                                            return (
+                                              <Response
+                                                key={`${message.id}-${i}`}
+                                              >
+                                                {part.data.reportText}
+                                              </Response>
+                                            );
+                                          }
+                                          return null;
+                                        })}
+                                      </CardContent>
                                     </Card>
                                   )}
                                 {message.parts.map((part, i) => {
@@ -357,8 +418,17 @@ const DeepSearchChat = ({
                                 onClick={() =>
                                   navigator.clipboard.writeText(
                                     message.parts
-                                      .filter((part) => part.type === "text")
-                                      .map((part) => part.text)
+                                      .filter(
+                                        (part) =>
+                                          part.type === "text" ||
+                                          part.type ===
+                                            "data-deepSearchReportPart"
+                                      )
+                                      .map((part) =>
+                                        part.type === "text"
+                                          ? part.text
+                                          : part.data.reportText
+                                      )
                                       .join("\n")
                                   )
                                 }

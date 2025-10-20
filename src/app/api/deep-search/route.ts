@@ -6,6 +6,8 @@ import {
   updateAssistantMessageContent,
   updateActiveStreamId,
   updateDeepSearchMessageProgress,
+  calculateMessageProgress,
+  syncMessageProgress,
 } from "@/actions/deep-search.actions";
 
 import {
@@ -15,13 +17,14 @@ import {
   convertToModelMessages,
   streamText,
   stepCountIs,
+  smoothStream,
 } from "ai";
 import { createResumableStreamContext } from "resumable-stream";
 import { after } from "next/server";
 import { DeepSearchUIMessage } from "@/types/deep-search";
 import { openai } from "@ai-sdk/openai";
-import { sanitizeMessages } from "@/lib/safe-messages";
 import { getTools, ProgressCalculator } from "@/lib/agent/deep-search";
+import { convertToDeepSearchUIMessages } from "@/lib/convertToUIMessage";
 
 export async function POST(req: Request) {
   try {
@@ -48,10 +51,14 @@ export async function POST(req: Request) {
 
     // Re-fetch session to get the latest messages including the one we just saved
     const updatedSession = await getOrCreateDeepSearchSessionById(sessionId);
-    const safeMessages = sanitizeMessages(updatedSession.messages ?? []);
+    const safeMessages = convertToDeepSearchUIMessages(
+      updatedSession.messages ?? []
+    );
     const convertedMessages = convertToModelMessages(safeMessages);
 
     const streamId = generateId();
+
+    const userStopSignal = new AbortController();
 
     await updateActiveStreamId(sessionId, streamId);
 
@@ -60,11 +67,6 @@ export async function POST(req: Request) {
       execute: async ({ writer }) => {
         // Initialize progress calculator
         const progressCalc = new ProgressCalculator();
-
-        // Track execution state
-        let isDeepSearch = false;
-        let totalSteps = 0;
-        let completedSteps = 0;
 
         const agent = streamText({
           model: openai("gpt-4o-mini"),
@@ -89,6 +91,7 @@ RULES:
 - synthesizeTool: Only after all searches complete
 - generateReportTool: Only after synthesis
 - If no deep search needed, just provide a helpful direct answer
+- If the report is generated no need to repeat the information in the final answer just summarize
 
 Do not call unnecessary tools. Be efficient.
 `,
@@ -96,12 +99,29 @@ Do not call unnecessary tools. Be efficient.
             ...convertedMessages,
           ],
           tools: getTools(writer, sessionId, assistantMessageId, progressCalc),
+          abortSignal: userStopSignal.signal,
+          experimental_transform: smoothStream({
+            delayInMs: 2, // optional: defaults to 0 (no delay)
+            chunking: "word", // optional: defaults to 'word'
+          }),
+          onAbort: async () => {
+            console.log(
+              `Deep search for session ${sessionId} aborted by user.`
+            );
+            await updateActiveStreamId(sessionId, null);
+          },
           stopWhen: stepCountIs(10),
           onStepFinish: async ({ toolCalls, toolResults, finishReason }) => {
-            completedSteps++;
+            // Get current progress from database
+            const progressData = await calculateMessageProgress(
+              assistantMessageId
+            );
+            const currentStep = progressData
+              ? progressData.completedSteps + 1
+              : 1;
 
             console.log(
-              `[STEP ${completedSteps}] Finished - Reason: ${finishReason}`
+              `[STEP ${currentStep}] Finished - Reason: ${finishReason}`
             );
 
             for (const toolCall of toolCalls) {
@@ -119,20 +139,26 @@ Do not call unnecessary tools. Be efficient.
                     searchQueries?: string[];
                   };
 
-                  isDeepSearch = analysisResult.needsDeepSearch;
+                  if (analysisResult.needsDeepSearch) {
+                    // Enable deep search for this message
+                    await updateDeepSearchMessageProgress(
+                      sessionId,
+                      assistantMessageId,
+                      0,
+                      false,
+                      true
+                    );
 
-                  if (isDeepSearch) {
-                    // Calculate total steps: analysis + searches + synthesis + report
+                    // Calculate expected total steps for planning log
                     const searchCount =
                       analysisResult.searchQueries?.length || 1;
-                    totalSteps = 1 + searchCount + 2; // 1 analysis + N searches + 1 synthesis + 1 report
+                    const expectedTotalSteps = 1 + searchCount + 2; // 1 analysis + N searches + 1 synthesis + 1 report
 
                     console.log(
-                      `[PLANNING] Deep search with ${searchCount} searches (${totalSteps} total steps)`
+                      `[PLANNING] Deep search with ${searchCount} searches (${expectedTotalSteps} expected steps)`
                     );
                   } else {
-                    // Simple response - just analysis + direct answer
-                    totalSteps = 1;
+                    // Simple response - no deep search needed
                     console.log("[PLANNING] Simple response - no deep search");
 
                     // Mark as complete immediately
@@ -147,14 +173,14 @@ Do not call unnecessary tools. Be efficient.
               }
             }
 
-            // Log progress
-            if (totalSteps > 0 && isDeepSearch) {
-              const estimatedProgress = Math.min(
-                95,
-                Math.floor((completedSteps / totalSteps) * 100)
-              );
+            // Sync progress based on current database state
+            const syncedProgress = await syncMessageProgress(
+              assistantMessageId
+            );
+
+            if (syncedProgress && syncedProgress.isDeepSearch) {
               console.log(
-                `[PROGRESS] ${estimatedProgress}% (${completedSteps}/${totalSteps} steps)`
+                `[PROGRESS] ${syncedProgress.progress}% (${syncedProgress.completedSteps}/${syncedProgress.totalSteps} steps)`
               );
             }
           },
@@ -169,8 +195,13 @@ Do not call unnecessary tools. Be efficient.
               await updateAssistantMessageContent(assistantMessageId, text);
             }
 
-            // Ensure 100% completion
-            if (isDeepSearch) {
+            // Get current progress to check if this is a deep search
+            const progressData = await calculateMessageProgress(
+              assistantMessageId
+            );
+
+            if (progressData && progressData.isDeepSearch) {
+              // Ensure 100% completion for deep search
               await updateDeepSearchMessageProgress(
                 sessionId,
                 assistantMessageId,
@@ -196,8 +227,14 @@ Do not call unnecessary tools. Be efficient.
           },
         });
 
-        writer.merge(agent.toUIMessageStream());
+        writer.merge(
+          agent.toUIMessageStream({
+            originalMessages: safeMessages,
+            generateMessageId: () => assistantMessageId,
+          })
+        );
       },
+      originalMessages: safeMessages,
 
       onFinish: async ({ messages }) => {
         console.log("[STREAM] Complete - Messages:", messages.length);
@@ -207,17 +244,27 @@ Do not call unnecessary tools. Be efficient.
 
     return createUIMessageStreamResponse({
       stream,
-      async consumeSseStream({ stream }) {
-        try {
-          const streamContext = createResumableStreamContext({
-            waitUntil: after,
-          });
 
+      async consumeSseStream({ stream }) {
+        const streamContext = createResumableStreamContext({
+          waitUntil: after,
+        });
+
+        try {
+          // 1) create/reserve the stream in Redis (publisher side)
           await streamContext.createNewResumableStream(streamId, () => stream);
-        } catch (error) {
-          console.error("Error in consumeSseStream:", error);
+
+          // 2) after the stream is created in Redis, persist it so resume won't race
+          await updateActiveStreamId(sessionId, streamId);
+
+          console.log(
+            `Resumable stream ${streamId} created and saved for session ${sessionId}`
+          );
+        } catch (err) {
+          console.error("Error creating resumable stream:", err);
+          // ensure no stale activeStreamId if something partially succeeded
           await updateActiveStreamId(sessionId, null);
-          throw error;
+          throw err; // let createUIMessageStreamResponse surface the error
         }
       },
     });

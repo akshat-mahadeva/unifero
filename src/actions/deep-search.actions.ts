@@ -697,7 +697,8 @@ export const saveDeepSearchSources = async (
 
 export const updateDeepSearchStepReasoning = async (
   stepId: string,
-  reasoningText: string
+  reasoningText?: string | null,
+  output?: Prisma.InputJsonValue
 ) => {
   try {
     if (!stepId) throw new Error("Step ID is required");
@@ -716,7 +717,11 @@ export const updateDeepSearchStepReasoning = async (
 
     return await prisma.deepSearchStep.update({
       where: { id: stepId },
-      data: { reasoningText, updatedAt: new Date() },
+      data: {
+        reasoningText: reasoningText ?? null,
+        updatedAt: new Date(),
+        output: output ?? undefined,
+      },
     });
   } catch (err) {
     handleError("updateDeepSearchStepReasoning", err);
@@ -811,5 +816,102 @@ export async function getMessageSteps(messageId: string) {
     return message.DeepSearchStep;
   } catch (err) {
     handleError("getMessageSteps", err);
+  }
+}
+
+// ==================== PROGRESS TRACKING HELPERS ====================
+
+/**
+ * Calculate progress based on database state
+ * Returns current progress percentage based on completed vs total steps
+ */
+export async function calculateMessageProgress(messageId: string) {
+  try {
+    if (!messageId) throw new Error("messageId is required");
+
+    const userId = await getUserIdOrThrow();
+
+    // Get message to verify ownership
+    const message = await prisma.deepSearchMessage.findUnique({
+      where: { id: messageId },
+      include: { session: true },
+    });
+
+    if (!message) throw new Error("Message not found");
+    if (message.session.userId !== userId) throw new Error("Not authorized");
+
+    // Count total and completed steps
+    const [totalSteps, completedSteps] = await Promise.all([
+      prisma.deepSearchStep.count({
+        where: { deepSearchMsgId: messageId },
+      }),
+      prisma.deepSearchStep.count({
+        where: {
+          deepSearchMsgId: messageId,
+          isExecuted: true,
+        },
+      }),
+    ]);
+
+    // If no steps exist yet, return current progress from message
+    if (totalSteps === 0) {
+      return {
+        progress: message.progress,
+        totalSteps: 0,
+        completedSteps: 0,
+        isComplete: message.completed,
+        isDeepSearch: message.isDeepSearchInitiated,
+      };
+    }
+
+    // Calculate progress percentage
+    const progressPercentage = Math.min(
+      95,
+      Math.floor((completedSteps / totalSteps) * 100)
+    );
+
+    return {
+      progress: progressPercentage,
+      totalSteps,
+      completedSteps,
+      isComplete: message.completed,
+      isDeepSearch: message.isDeepSearchInitiated,
+    };
+  } catch (err) {
+    handleError("calculateMessageProgress", err);
+  }
+}
+
+/**
+ * Update message progress based on current database state
+ * This syncs the DeepSearchMessage.progress with actual step completion
+ */
+export async function syncMessageProgress(messageId: string) {
+  try {
+    if (!messageId) throw new Error("messageId is required");
+
+    const progressData = await calculateMessageProgress(messageId);
+
+    if (!progressData) return null;
+
+    // Update the message progress to match DB state
+    const updated = await prisma.deepSearchMessage.update({
+      where: { id: messageId },
+      data: {
+        progress: progressData.progress,
+        updatedAt: new Date(),
+      },
+    });
+
+    console.log(
+      `[SYNC] Progress updated: ${progressData.progress}% (${progressData.completedSteps}/${progressData.totalSteps} steps)`
+    );
+
+    return {
+      ...progressData,
+      message: updated,
+    };
+  } catch (err) {
+    handleError("syncMessageProgress", err);
   }
 }

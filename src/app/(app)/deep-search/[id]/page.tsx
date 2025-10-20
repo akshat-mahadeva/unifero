@@ -14,8 +14,11 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
 
   // logging last message
 
-  const lastMessage = chat.messages[chat.messages.length - 1];
-  console.log("lastMessage", lastMessage);
+  // const lastMessage = chat.messages[chat.messages.length - 1];
+  // console.log(
+  //   "lastMessage",
+  //   lastMessage.DeepSearchStep.find((step) => step.type === "report")?.output
+  // );
 
   const uiMessages = convertToDeepSearchUIMessages(chat.messages);
 

@@ -28,17 +28,26 @@ const allSuggestions = [
 ];
 
 const deepSearchSuggestions = [
-  "How to conduct effective deep web searches?",
-  "Tools for accessing the deep web",
-  "Understanding the dark web vs deep web",
-  "Best practices for online anonymity",
-  "How to find academic papers on the deep web",
-  "Techniques for advanced search queries",
-  "What are hidden services on the dark web?",
-  "Legal considerations when exploring the deep web",
-  "How to use Tor for deep web browsing",
-  "Finding niche communities on the deep web",
-  "Security tips for deep web users",
+  "Conduct a comprehensive analysis of the differences between the deep web and dark web",
+  "Investigate current geopolitical tensions in Eastern Europe and their global economic impacts",
+  "Research the latest breakthroughs in CRISPR gene editing and their ethical implications",
+  "Analyze how climate change has affected global migration patterns over the past decade",
+  "Explore the evolution of quantum computing hardware and emerging commercial applications",
+  "Deep dive into the origins of the opioid crisis and effectiveness of current interventions",
+  "Examine emerging trends in sustainable agriculture technologies and their adoption rates",
+  "Comprehensive study on the impact of social media on adolescent mental health",
+  "Investigate blockchain applications beyond cryptocurrency and associated challenges",
+  "Research the future of space tourism: key companies, technologies, and regulatory hurdles",
+  "Analyze the current state and trajectory of artificial general intelligence research",
+  "Explore advanced techniques for conducting effective deep web searches",
+  "Investigate tools and best practices for maintaining online anonymity",
+  "Research legal considerations and risks when exploring the deep web",
+  "Deep analysis of Tor network usage and its role in online privacy",
+  "Examine the security landscape of deep web browsing and protection strategies",
+  "Research the role of academic databases in the deep web ecosystem",
+  "Investigate hidden services on the dark web and their societal implications",
+  "Analyze techniques for advanced search queries across different web layers",
+  "Explore niche communities and forums on the deep web and their cultural impact",
 ];
 
 /**

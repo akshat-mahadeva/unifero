@@ -3,12 +3,11 @@ import {
   saveDeepSearchSources,
   createDeepSearchStep,
   updateDeepSearchStepReasoning,
-  updateAssistantMessageContent,
   enableDeepSearch,
   updateDeepSearchMessageProgress,
 } from "@/actions/deep-search.actions";
 import { openai } from "@ai-sdk/openai";
-import { generateObject, tool, UIMessageStreamWriter } from "ai";
+import { generateObject, generateText, tool, UIMessageStreamWriter } from "ai";
 import Exa from "exa-js";
 import z from "zod";
 import { DeepSearchStepType } from "@/types/deep-search";
@@ -111,17 +110,17 @@ NEEDS DEEP SEARCH:
 - Current/recent events or news
 - Questions requiring multiple authoritative sources
 - Research topics needing comprehensive analysis
-- Explicit requests for detailed investigation
+- Explicit requests for detailed investigation or deep search
 - Questions about recent developments (2024-2025)
+- Explicit phrases like "do a deep search", "research this", "generate a report"
+- Any query that seems to want detailed, sourced information
 
-CAN ANSWER DIRECTLY:
-- Greetings and casual conversation
-- General knowledge with stable answers
-- Conceptual explanations (e.g., "What is React?")
+CAN ANSWER DIRECTLY (only if clearly trivial):
+- Greetings and casual conversation (e.g., "hello", "how are you?")
 - Questions about yourself as an AI
-- Simple factual queries
+- Very simple factual queries with stable answers
 
-Be conservative: if uncertain, default to deep search.`,
+Default to deep search for any uncertainty or research-oriented queries.`,
         prompt: `Query: "${query}"\n\nAnalyze this query.`,
         schema: z.object({
           needsDeepSearch: z.boolean(),
@@ -379,7 +378,7 @@ Be conservative: if uncertain, default to deep search.`,
         id: `reasoning-${stepEventId}`,
         data: {
           stepId: step?.id,
-          reasoningText: "Analyzing gathered information",
+          reasoningText: reasoning || "Synthesizing findings...",
           reasoningType: "evaluation",
           search: [],
         },
@@ -402,6 +401,18 @@ Extract 3-5 key insights that directly answer the question.`,
       if (step) {
         await updateDeepSearchStepReasoning(step.id, object.synthesis);
       }
+
+      // Stream updated reasoning
+      writer.write({
+        type: "data-deepSearchReasoningPart",
+        id: `reasoning-final-${stepEventId}`,
+        data: {
+          stepId: step?.id,
+          reasoningText: object.synthesis,
+          reasoningType: "evaluation",
+          search: [],
+        },
+      });
 
       // Update progress
       const progress = progressCalc.getSynthesisProgress();
@@ -466,7 +477,7 @@ Extract 3-5 key insights that directly answer the question.`,
         },
       });
 
-      const { object } = await generateObject({
+      const { text } = await generateText({
         model: openai("gpt-4o-mini"),
         prompt: `Create a comprehensive response to: "${originalQuery}"
 
@@ -476,9 +487,6 @@ ${insights.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
 Synthesis: ${synthesis}
 
 Format as clear, informative response with markdown structure.`,
-        schema: z.object({
-          report: z.string(),
-        }),
       });
 
       // Stream report
@@ -487,17 +495,29 @@ Format as clear, informative response with markdown structure.`,
         type: "data-deepSearchReportPart",
         id: `report-${reportEventId}`,
         data: {
+          type: "deep-search-report",
           id: `report-${reportEventId}`,
-          content: object.report,
+          reportText: text,
         },
       });
 
-      // Save report
-      await updateAssistantMessageContent(messageId, object.report);
-
       if (step) {
-        await updateDeepSearchStepReasoning(step.id, "Report completed");
+        await updateDeepSearchStepReasoning(step.id, "Report completed", {
+          report: text,
+        });
       }
+
+      // Stream updated reasoning
+      writer.write({
+        type: "data-deepSearchReasoningPart",
+        id: `reasoning-final-${stepEventId}`,
+        data: {
+          stepId: step?.id,
+          reasoningText: "Report completed",
+          reasoningType: "report",
+          search: [],
+        },
+      });
 
       // Final progress
       const progress = progressCalc.getReportProgress();
@@ -522,7 +542,7 @@ Format as clear, informative response with markdown structure.`,
       });
 
       return {
-        report: object.report,
+        report: text,
         completed: true,
       };
     },
