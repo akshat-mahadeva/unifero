@@ -82,6 +82,7 @@ model DeepSearchMessage {
   session                DeepSearchSession        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   DeepSearchToolSnapshot DeepSearchToolSnapshot[]
   DeepSearchStep         DeepSearchStep[]
+  DeepSearchSource       DeepSearchSource[]
 
   @@index([sessionId])
 }
@@ -108,11 +109,33 @@ model DeepSearchStep {
   isExecuted        Boolean            @default(false)
   input             Json
   output            Json
+  reasoningText     String?            @db.Text
   type              DeepSearchStepType @default(analyze)
   deepSearchMsgId   String
   deepSearchMessage DeepSearchMessage  @relation(fields: [deepSearchMsgId], references: [id], onDelete: Cascade)
+  sources           DeepSearchSource[]
 
   @@index([deepSearchMsgId])
+}
+
+model DeepSearchSource {
+  id            String            @id @default(cuid())
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  name          String
+  url           String
+  favicon       String?
+  content       String?           @db.Text
+  images        Json?
+  publishedDate DateTime?
+  messageId     String
+  stepId        String?
+  message       DeepSearchMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  step          DeepSearchStep?   @relation(fields: [stepId], references: [id], onDelete: SetNull)
+
+  @@unique([url, stepId])
+  @@index([messageId])
+  @@index([stepId])
 }
 
 enum DeepSearchStepType {

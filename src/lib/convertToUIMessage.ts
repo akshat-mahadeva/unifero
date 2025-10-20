@@ -76,31 +76,86 @@ export const convertSingleToUIMessage = (
 export const convertToDeepSearchUIMessages = (
   messages: DeepSearchDBMessage[]
 ): DeepSearchUIMessage[] => {
-  return messages.map((m) => ({
-    id: m.id!,
-    role: ["system", "user", "assistant"].includes(m.role)
-      ? (m.role as "system" | "user" | "assistant")
-      : "user",
-    metadata: {
-      progress: m.progress ?? 0,
-      isDeepSearchInitiated: m.isDeepSearchInitiated ?? false,
-    },
-    parts: [
-      ...(m.isDeepSearchInitiated
+  return messages.map((m) => {
+    // Prisma returns capitalized property names: DeepSearchStep, DeepSearchSource
+    const steps = m.DeepSearchStep || m.deepSearchSteps || [];
+    const sources = m.DeepSearchSource || m.deepSearchSources || [];
+
+    // Check if this message has deep search data (steps or sources)
+    const hasDeepSearchData = steps.length > 0 || sources.length > 0;
+
+    const parts = [
+      // Add deepSearchDataPart if there's deep search data
+      ...(hasDeepSearchData
         ? [
             {
-              type: "data-deepSearchDataPart",
+              type: "data-deepSearchDataPart" as const,
               data: {
                 progress: m.progress ?? 0,
-                isDeepSearchInitiated: m.isDeepSearchInitiated ?? false,
+                isDeepSearchInitiated: true,
               },
             },
           ]
         : []),
+      // Add reasoning parts from steps
+      ...steps.map((step) => {
+        // Get sources for this specific step
+        const stepSources = sources.filter((s) => s.stepId === step.id);
+
+        return {
+          type: "data-deepSearchReasoningPart" as const,
+          id: step.id,
+          data: {
+            stepId: step.id,
+            reasoningText: step.reasoningText ?? "",
+            reasoningType: step.type.toLowerCase() as
+              | "analysis"
+              | "search"
+              | "evaluation"
+              | "report",
+            // Add search array for search-type steps with sources for this step
+            ...(step.type.toLowerCase() === "search" && stepSources.length > 0
+              ? {
+                  search: stepSources.map((source) => ({
+                    title: source.name,
+                    url: source.url,
+                    favicon: source.favicon || "",
+                  })),
+                }
+              : {}),
+          },
+        };
+      }),
+      // Add source parts grouped by step
+      ...sources.map((source) => ({
+        type: "data-deepSearchSourcePart" as const,
+        id: source.id!,
+        data: {
+          stepId: source.stepId,
+          name: source.name,
+          url: source.url,
+          content: source.content ?? "",
+          favicon: source.favicon ?? "",
+          images: source.images,
+        },
+      })),
+      // Add text content
       {
         type: "text" as const,
         text: m.content ?? "",
       },
-    ],
-  })) as DeepSearchUIMessage[];
+    ];
+
+    return {
+      id: m.id!,
+      role: ["system", "user", "assistant"].includes(m.role)
+        ? (m.role as "system" | "user" | "assistant")
+        : "user",
+      metadata: {
+        progress: m.progress ?? 0,
+        isDeepSearchInitiated: hasDeepSearchData || m.isDeepSearchInitiated,
+      },
+      parts,
+    };
+  }) as DeepSearchUIMessage[];
 };

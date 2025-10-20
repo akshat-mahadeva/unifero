@@ -1,8 +1,7 @@
 import React from "react";
-import DeepSearchChat from "@/components/deep-search/DeepSearchChat";
 
 const page = () => {
-  return <DeepSearchChat />;
+  return <div>Deep Search Page</div>;
 };
 
 export default page;

@@ -22,7 +22,7 @@ import {
   PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
 import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { Response } from "@/components/ai-elements/response";
 import { CopyIcon } from "lucide-react";
@@ -35,7 +35,7 @@ import { toast } from "sonner";
 import ChatHeader from "./DeepSearchHeader";
 import { TextGenerateEffect } from "@/components/ui/text-generate-effect";
 import { useQueryClient } from "@tanstack/react-query";
-import { sessionKeys } from "@/hooks/use-sessions-query";
+import { deepSearchSessionKeys } from "@/hooks/use-deep-search-sessions";
 import { usePathname } from "next/navigation";
 import { getRandomDeepSearchSuggestions } from "@/lib/get-suggestions";
 import { LoaderOne } from "../ui/loaders";
@@ -45,6 +45,15 @@ import { Progress } from "../ui/progress";
 import { DeepSearchUIMessage } from "@/types/deep-search";
 import { Separator } from "../ui/separator";
 import { Tool, ToolHeader } from "../ai-elements/tool";
+import DeepSearchCanvas from "./DeepSearchCanvas";
+import { Button } from "../ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "../ui/sheet";
 
 const DeepSearchChat = ({
   sessionId,
@@ -102,7 +111,7 @@ const DeepSearchChat = ({
           window.history.replaceState({}, "", `/deep-search/${sessionId}`);
           setTimeout(() => {
             queryClient.invalidateQueries({
-              queryKey: sessionKeys.detail(sessionId),
+              queryKey: deepSearchSessionKeys.detail(sessionId),
             });
           }, 100);
         }
@@ -135,7 +144,7 @@ const DeepSearchChat = ({
         window.history.replaceState({}, "", `/deep-search/${sessionId}`);
         setTimeout(() => {
           queryClient.invalidateQueries({
-            queryKey: sessionKeys.detail(sessionId),
+            queryKey: deepSearchSessionKeys.detail(sessionId),
           });
         }, 100);
       }
@@ -181,14 +190,16 @@ const DeepSearchChat = ({
   };
 
   return (
-    <div className="relative w-full flex flex-col flex-1 overflow-hidden">
+    <div className="relative w-full flex flex-col h-screen">
       <ChatHeader
         isHomePage={isHomePage}
         sessionId={sessionId}
         sessionTitle={sessionTitle}
       />
-      <div className="flex flex-col flex-1 overflow-hidden max-w-4xl w-full mx-auto p-4">
-        <Conversation className="flex-1 w-full">
+      <div
+        className={`flex flex-1 max-w-4xl w-full mx-auto flex-col overflow-hidden p-4`}
+      >
+        <Conversation className="flex-1 w-full overflow-hidden">
           <ConversationContent className="w-full">
             {messages.length === 0 && isHomePage ? (
               <ConversationEmptyState
@@ -212,7 +223,6 @@ const DeepSearchChat = ({
               />
             ) : (
               <>
-                {/* Render actual messages */}
                 {messages.map((message) => {
                   return (
                     <div key={message.id}>
@@ -270,7 +280,7 @@ const DeepSearchChat = ({
                                           state={part.state}
                                         />
                                       </Tool>
-                                    ); // Skip rendering progress parts here
+                                    );
                                   }
                                   if (part.type === "text") {
                                     return (
@@ -300,6 +310,52 @@ const DeepSearchChat = ({
                               >
                                 <CopyIcon className="size-3" />
                               </Action>
+
+                              <Sheet>
+                                <SheetTrigger asChild>
+                                  <Button size="sm" variant="ghost">
+                                    View Activity
+                                  </Button>
+                                </SheetTrigger>
+
+                                <SheetContent
+                                  side="right"
+                                  className="w-full sm:max-w-lg"
+                                >
+                                  <SheetHeader>
+                                    <SheetTitle>
+                                      Deep Search Activity
+                                    </SheetTitle>
+                                  </SheetHeader>
+                                  <DeepSearchCanvas
+                                    messageId={message.id}
+                                    reasoningParts={message.parts
+                                      .filter(
+                                        (part) =>
+                                          part.type ===
+                                          "data-deepSearchReasoningPart"
+                                      )
+                                      .map((part) => part.data)}
+                                    sourceParts={message.parts
+                                      .filter(
+                                        (part) =>
+                                          part.type ===
+                                          "data-deepSearchSourcePart"
+                                      )
+                                      .map((part) => ({
+                                        id: part.id,
+                                        source: {
+                                          name: part.data.name,
+                                          url: part.data.url,
+                                          content: part.data.content,
+                                          favicon: part.data.favicon,
+                                          images: part.data.images,
+                                        },
+                                      }))}
+                                    initialTab="reasoning"
+                                  />
+                                </SheetContent>
+                              </Sheet>
                             </Actions>
                           )}
                         </MessageContent>
@@ -339,7 +395,7 @@ const DeepSearchChat = ({
 
         <PromptInput
           onSubmit={handleSubmit}
-          className="mt-4 p-1 border shadow-none rounded-sm"
+          className=" p-1 border shadow-none rounded-sm"
           globalDrop
           multiple
         >
@@ -375,7 +431,6 @@ const DeepSearchChat = ({
             <PromptInputSubmit
               className="rounded-sm"
               disabled={!input || hasOpengingDeepSearch} // 🔥 Disable during deep search
-              status={status}
             />
           </PromptInputToolbar>
         </PromptInput>

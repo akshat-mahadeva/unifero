@@ -13,6 +13,7 @@ import {
   createUIMessageStreamResponse,
   convertToModelMessages,
   streamText,
+  stepCountIs,
 } from "ai";
 import { createResumableStreamContext } from "resumable-stream";
 import { after } from "next/server";
@@ -29,11 +30,10 @@ export async function POST(req: Request) {
       return new Response("Missing required fields", { status: 400 });
     }
 
-    const currentSession = await getOrCreateDeepSearchSessionById(
-      sessionId,
-      prompt.slice(0, 20)
-    );
+    // Get or create session first
+    await getOrCreateDeepSearchSessionById(sessionId, prompt.slice(0, 50));
 
+    // Save user message first
     await saveDeepSearchMessagesToSession(sessionId, [
       {
         id: `user-${Date.now()}`,
@@ -43,10 +43,11 @@ export async function POST(req: Request) {
     ]);
 
     const assistantMessage = await createAssistantMessage(sessionId, false);
-
     const assistantMessageId = assistantMessage.id;
 
-    const safeMessages = sanitizeMessages(currentSession.messages ?? []);
+    // Re-fetch session to get the latest messages including the one we just saved
+    const updatedSession = await getOrCreateDeepSearchSessionById(sessionId);
+    const safeMessages = sanitizeMessages(updatedSession.messages ?? []);
     const convertedMessages = convertToModelMessages(safeMessages);
 
     const streamId = generateId();
@@ -58,12 +59,28 @@ export async function POST(req: Request) {
       execute: async ({ writer }) => {
         const codeAgent = streamText({
           model: openai("gpt-4o-mini"),
-          messages: convertedMessages,
-          tools: getTools(writer, assistantMessageId),
+          messages: [
+            {
+              role: "system",
+              content: `You are a Deep Search AI assistant. Your job is to perform comprehensive research on user queries.
+
+IMPORTANT: When a user asks a question, you MUST:
+1. First, use the sentimentAnalysisTool to analyze the query
+2. Then, use the webSearchTool to search for relevant information (MANDATORY for every query)
+3. After gathering information, use analyseAndEvaluateTool to analyze the findings
+4. Finally, use generateReportTool to create a comprehensive response
+
+DO NOT just respond with text. You MUST use the tools in sequence to perform proper deep search.
+Always start by calling webSearchTool with the user's query to gather information.`,
+            },
+            ...convertedMessages,
+          ],
+          tools: getTools(writer, sessionId, assistantMessageId),
+          stopWhen: stepCountIs(8),
           onStepFinish: ({ toolCalls }) => {
             for (const toolCall of toolCalls) {
-              if (toolCall.toolName === "") {
-                console.log("Deep search tool output:", toolCall.input);
+              if (toolCall.toolName) {
+                console.log("Tool executed:", toolCall.toolName);
               }
             }
           },

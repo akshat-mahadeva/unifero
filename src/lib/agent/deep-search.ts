@@ -1,8 +1,16 @@
 // import { updateDeepSearchMessageProgress } from "@/actions/deep-search.actions";
+import {
+  saveDeepSearchSources,
+  createDeepSearchStep,
+  updateDeepSearchStepReasoning,
+  updateAssistantMessageContent,
+} from "@/actions/deep-search.actions";
 import { openai } from "@ai-sdk/openai";
 import { generateObject, tool, UIMessageStreamWriter } from "ai";
 import Exa from "exa-js";
 import z from "zod";
+import { DeepSearchStepType } from "@/types/deep-search";
+import { randomUUID } from "crypto";
 
 export const exa = new Exa(process.env.EXA_API_KEY!);
 
@@ -82,10 +90,15 @@ export const exa = new Exa(process.env.EXA_API_KEY!);
 //   });
 // }
 
-export function getTools(writer: UIMessageStreamWriter, messageId: string) {
+export function getTools(
+  writer: UIMessageStreamWriter,
+  sessionId: string,
+  messageId: string
+) {
   // sentiment analysis tool
   const sentimentAnalysisTool = tool({
-    description: "Analyze the sentiment of the given text.",
+    description:
+      "ALWAYS call this FIRST to analyze the user's query and determine the research approach. This is mandatory for every query.",
     inputSchema: z.object({
       prompt: z.string().min(1, "Text cannot be empty"),
       reasoning: z
@@ -94,11 +107,22 @@ export function getTools(writer: UIMessageStreamWriter, messageId: string) {
         .describe("Optional reasoning text from main agent"),
     }),
     execute: async ({ prompt, reasoning }) => {
+      const step = await createDeepSearchStep({
+        sessionId,
+        messageId,
+        stepType: DeepSearchStepType.analyze,
+        reasoningText: reasoning || "Analysing query...",
+        executed: false,
+        input: { prompt },
+      });
+
+      const stepEventId = randomUUID();
+
       writer.write({
         type: "data-deepSearchDataPart",
-        id: `deep-search-sentiment-${messageId}`,
+        id: `deep-search-data-${stepEventId}`,
         data: {
-          id: `deep-search-sentiment-${messageId}`,
+          id: `deep-search-data-${stepEventId}`,
           progress: 0,
           messageId,
           text: reasoning,
@@ -108,16 +132,18 @@ export function getTools(writer: UIMessageStreamWriter, messageId: string) {
 
       writer.write({
         type: "data-deepSearchReasoningPart",
-        id: `deep-search-reasoning-${messageId}`,
+        id: `deep-search-reasoning-${stepEventId}`,
         data: {
-          id: `deep-search-reasoning-${messageId}`,
+          id: `deep-search-reasoning-${stepEventId}`,
+          stepId: step?.id,
           reasoningText: reasoning || "Analysing query...",
           reasoningType: "analysis",
+          search: [],
         },
       });
 
       const { object } = await generateObject({
-        model: openai("gpt-3.5-turbo"),
+        model: openai("gpt-4o-mini"),
         system: "You generate three notifications for a messages app.",
         prompt,
         schema: z.object({
@@ -130,13 +156,19 @@ export function getTools(writer: UIMessageStreamWriter, messageId: string) {
 
       writer.write({
         type: "data-deepSearchReasoningPart",
-        id: `deep-search-reasoning-${messageId}`,
+        id: `deep-search-reasoning-${stepEventId}`,
         data: {
-          id: `deep-search-reasoning-${messageId}`,
+          id: `deep-search-reasoning-${stepEventId}`,
+          stepId: step?.id,
           reasoningText: object.reasoningText || "Analysing query...",
           reasoningType: "analysis",
+          search: [],
         },
       });
+
+      if (step) {
+        await updateDeepSearchStepReasoning(step.id, object.reasoningText);
+      }
 
       return object;
     },
@@ -150,7 +182,7 @@ export function getTools(writer: UIMessageStreamWriter, messageId: string) {
     }),
     execute: async ({ query }) => {
       const result = await generateObject({
-        model: openai("gpt-3.5-turbo"),
+        model: openai("gpt-4o-mini"),
         system:
           "You are an assistant that generates detailed steps for deep search tasks.",
         prompt: `Generate a list of steps to perform a deep search for the following query: "${query}"`,
@@ -176,7 +208,8 @@ export function getTools(writer: UIMessageStreamWriter, messageId: string) {
   });
 
   const webSearchTool = tool({
-    description: "Search the web for up-to-date information",
+    description:
+      "Search the web for up-to-date information. MANDATORY: Call this tool for EVERY user query to gather relevant sources and information.",
     inputSchema: z.object({
       reasoningText: z
         .string()
@@ -185,52 +218,118 @@ export function getTools(writer: UIMessageStreamWriter, messageId: string) {
       query: z.string().min(1).max(100).describe("The search query"),
     }),
     execute: async ({ query }) => {
+      const step = await createDeepSearchStep({
+        sessionId,
+        messageId,
+        stepType: DeepSearchStepType.search,
+        reasoningText: `Searching the web for: "${query}"`,
+        executed: false,
+        input: { query },
+      });
+
+      const stepEventId = randomUUID();
+
       writer.write({
         type: "data-deepSearchReasoningPart",
-        id: `deep-search-reasoning-search-${messageId}`,
+        id: `deep-search-reasoning-${stepEventId}`,
         data: {
-          id: `deep-search-reasoning-search-${messageId}`,
+          stepId: step?.id,
           reasoningText: `Searching the web for: "${query}"`,
           reasoningType: "search",
         },
       });
-      const { results } = await exa.searchAndContents(query, {
-        livecrawl: "auto",
-        numResults: 2,
-      });
+
+      // Mock Exa results for testing
+      const mockResults = [
+        {
+          id: 1,
+          title: "OpenAI Research Paper",
+          url: "https://openai.com/research/gpt-4",
+          favicon:
+            "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSobT6Nq7W-FJnK5lLapZlwySLwB0W4sKCYDg&s",
+          text: "Detailed analysis of GPT-4 capabilities.",
+          image: undefined,
+          publishedDate: "2024-02-20",
+        },
+
+        {
+          id: 2,
+          title: "Google DeepMind",
+          url: "https://deepmind.google/",
+          favicon: "https://www.google.com/favicon.ico",
+          text: "Advancements in AI and machine learning.",
+          image: undefined,
+          publishedDate: "2024-01-15",
+        },
+      ];
+
+      const searchResults = mockResults;
+
+      // Comment out actual Exa call
+      // const { results } = await exa.searchAndContents(query, {
+      //   livecrawl: "auto",
+      //   numResults: 2,
+      // });
+      // const searchResults = results;
 
       writer.write({
         type: "data-deepSearchReasoningPart",
-        id: `deep-search-reasoning-search-${messageId}`,
+        id: `deep-search-reasoning-${stepEventId}`,
         data: {
-          id: `deep-search-reasoning-search-${messageId}`,
-          search: results.map((result) => ({
-            title: result.title,
-            url: result.url,
-            favicon: result.favicon,
-          })),
+          stepId: step?.id,
+          reasoningText: `Found ${searchResults.length} relevant sources for "${query}"`,
           reasoningType: "search",
-        },
-      });
-
-      writer.write({
-        type: "data-deepSearchSourcePart",
-        id: `deep-search-source-search-${messageId}`,
-        data: {
-          id: `deep-search-source-search-${messageId}`,
-          sources: results.map((result) => ({
-            id: result.id,
+          search: searchResults.map((result) => ({
             title: result.title,
             url: result.url,
-            favicon: result.favicon,
-            text: result.text,
-            image: result.image,
-            publishedDate: result.publishedDate,
+            favicon: result.favicon || "",
           })),
         },
       });
 
-      return results.map((result) => ({
+      // Stream each source individually with unique IDs
+      for (const result of searchResults) {
+        const sourceEventId = randomUUID();
+        writer.write({
+          type: "data-deepSearchSourcePart",
+          id: `deep-search-source-${sourceEventId}`,
+          data: {
+            stepId: step?.id,
+            name: result.title,
+            url: result.url,
+            content: result.text,
+            favicon: result.favicon,
+            images: result.image ? [result.image] : undefined,
+          },
+        });
+      }
+
+      // Save sources to DB with stepId to link them to this specific step
+      if (step) {
+        await saveDeepSearchSources(
+          messageId,
+          searchResults.map((result) => ({
+            name: result.title || "Untitled",
+            url: result.url,
+            favicon: result.favicon,
+            content: result.text,
+            images: result.image ? [result.image] : undefined,
+            publishedDate: result.publishedDate
+              ? new Date(result.publishedDate)
+              : undefined,
+          })),
+          step.id // Pass stepId to link sources to this step
+        );
+      }
+
+      if (step) {
+        await updateDeepSearchStepReasoning(
+          step.id,
+          `Searched for "${query}" and found ${searchResults.length} sources.`
+        );
+      }
+
+      return searchResults.map((result) => ({
         title: result.title,
         url: result.url,
         content: result.text.slice(0, 1000),
@@ -251,13 +350,26 @@ export function getTools(writer: UIMessageStreamWriter, messageId: string) {
       data: z.string().min(1).describe("The data to be analysed"),
     }),
     execute: async ({ data, reasoningText }) => {
+      const step = await createDeepSearchStep({
+        sessionId,
+        messageId,
+        stepType: DeepSearchStepType.evaluate,
+        reasoningText: reasoningText || "Analysing gathered information...",
+        executed: false,
+        input: { data },
+      });
+
+      const stepEventId = randomUUID();
+
       writer.write({
         type: "data-deepSearchReasoningPart",
-        id: `deep-search-reasoning-analysis-${messageId}`,
+        id: `deep-search-reasoning-${stepEventId}`,
         data: {
-          id: `deep-search-reasoning-analysis-${messageId}`,
+          id: `deep-search-reasoning-${stepEventId}`,
+          stepId: step?.id,
           reasoningText: reasoningText || "Analysing gathered information...",
-          reasoningType: "analysis",
+          reasoningType: "evaluation",
+          search: [],
         },
       });
       const result = await generateObject({
@@ -269,6 +381,13 @@ export function getTools(writer: UIMessageStreamWriter, messageId: string) {
           evaluateText: z.string(),
         }),
       });
+
+      if (step) {
+        await updateDeepSearchStepReasoning(
+          step.id,
+          result.object.reasoningText
+        );
+      }
 
       return result.toJsonResponse();
     },
@@ -287,13 +406,26 @@ export function getTools(writer: UIMessageStreamWriter, messageId: string) {
         .describe("The analysis to base the report on"),
     }),
     execute: async ({ analysis, reasoningText }) => {
+      const step = await createDeepSearchStep({
+        sessionId,
+        messageId,
+        stepType: DeepSearchStepType.report,
+        reasoningText: reasoningText || "Generating comprehensive report...",
+        executed: false,
+        input: { analysis },
+      });
+
+      const stepEventId = randomUUID();
+
       writer.write({
         type: "data-deepSearchReasoningPart",
-        id: `deep-search-reasoning-analysis-${messageId}`,
+        id: `deep-search-reasoning-${stepEventId}`,
         data: {
-          id: `deep-search-reasoning-analysis-${messageId}`,
-          reasoningText: reasoningText || "Analysing gathered information...",
-          reasoningType: "analysis",
+          id: `deep-search-reasoning-${stepEventId}`,
+          stepId: step?.id,
+          reasoningText: reasoningText || "Generating comprehensive report...",
+          reasoningType: "report",
+          search: [],
         },
       });
 
@@ -304,14 +436,27 @@ export function getTools(writer: UIMessageStreamWriter, messageId: string) {
           reportText: z.string(),
         }),
       });
+
+      const reportEventId = randomUUID();
+
       writer.write({
         type: "data-deepSearchReportPart",
-        id: `deep-search-report-${messageId}`,
+        id: `deep-search-report-${reportEventId}`,
         data: {
-          id: `deep-search-report-${messageId}`,
+          id: `deep-search-report-${reportEventId}`,
           content: object.reportText,
         },
       });
+
+      // Save report to message content
+      await updateAssistantMessageContent(messageId, object.reportText);
+
+      if (step) {
+        await updateDeepSearchStepReasoning(
+          step.id,
+          "Report generated successfully."
+        );
+      }
 
       return object;
     },

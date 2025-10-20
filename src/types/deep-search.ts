@@ -1,13 +1,21 @@
 import { UIMessage } from "ai";
 import z from "zod";
+import { DeepSearchRole, DeepSearchStepType } from "@/generated/prisma";
+
+export { DeepSearchRole, DeepSearchStepType };
 
 export type DeepSearchSource = {
-  id?: string | number;
+  id?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
   name: string;
   url: string;
-  favicon?: string;
-  content?: string;
-  images?: string[];
+  favicon?: string | null;
+  content?: string | null;
+  images?: unknown;
+  publishedDate?: Date | null;
+  messageId: string;
+  stepId?: string | null;
 };
 
 export type DeepSearchReasoningStep = {
@@ -44,19 +52,6 @@ export enum DeepSearchStepStatus {
   failed = "failed",
 }
 
-export enum DeepSearchStepType {
-  search = "search",
-  analyze = "analyze",
-  evaluate = "evaluate",
-  report = "report",
-}
-
-export enum DeepSearchRole {
-  user = "user",
-  assistant = "assistant",
-  system = "system",
-}
-
 export type DeepSearchSession = {
   id: string;
   createdAt: Date;
@@ -81,6 +76,7 @@ export type DeepSearchMessage = {
   session: DeepSearchSession;
   DeepSearchToolSnapshot: DeepSearchToolSnapshot[];
   DeepSearchStep: DeepSearchStep[];
+  DeepSearchSource: DeepSearchSource[];
 };
 
 export type DeepSearchStep = {
@@ -91,9 +87,10 @@ export type DeepSearchStep = {
   isExecuted: boolean;
   input: unknown;
   output: unknown;
+  reasoningText?: string | null;
   type: DeepSearchStepType;
   deepSearchMsgId: string;
-  deepSearchMessage: DeepSearchMessage;
+  deepSearchMessage?: DeepSearchMessage;
 };
 
 // DB-level message structure for deep search sessions
@@ -107,8 +104,13 @@ export type DeepSearchDBMessage = {
   sessionId: string;
   isDeepSearchInitiated: boolean;
   completed: boolean;
-  DeepSearchToolSnapshot?: DeepSearchToolSnapshot[];
+  toolSnapshots?: DeepSearchToolSnapshot[];
+  deepSearchSteps?: DeepSearchStep[];
+  deepSearchSources?: DeepSearchSource[];
+  // Prisma returns capitalized property names
   DeepSearchStep?: DeepSearchStep[];
+  DeepSearchSource?: DeepSearchSource[];
+  DeepSearchToolSnapshot?: DeepSearchToolSnapshot[];
 };
 
 export type MyMetadata = {
@@ -127,30 +129,29 @@ const dataPartSchema = z.object({
   }),
   deepSearchReasoningPart: z.object({
     type: z.literal("deep-search-reasoning"),
+    stepId: z.string().optional(),
     reasoningText: z.string(),
-    id: z.string(),
     reasoningType: z
       .enum(["analysis", "search", "evaluation", "report"])
       .default("analysis"),
-    search: z.array(
-      z.object({
-        title: z.string(),
-        url: z.string(),
-        favicon: z.string(),
-      })
-    ),
+    search: z
+      .array(
+        z.object({
+          title: z.string(),
+          url: z.string(),
+          favicon: z.string(),
+        })
+      )
+      .optional(),
   }),
   deepSearchSourcePart: z.object({
     type: z.literal("deep-search-source"),
-    id: z.string(),
-    source: z.object({
-      id: z.string().optional(),
-      name: z.string(),
-      url: z.string(),
-      favicon: z.string().optional(),
-      content: z.string().optional(),
-      images: z.array(z.string()).optional(),
-    }),
+    stepId: z.string().optional(),
+    name: z.string(),
+    url: z.string(),
+    content: z.string().optional(),
+    favicon: z.string().optional(),
+    images: z.array(z.string()).optional(),
   }),
 
   deepSearchReportPart: z.object({

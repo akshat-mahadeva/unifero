@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import {
   Sidebar,
   SidebarContent,
@@ -15,6 +16,7 @@ import {
 import { useUser } from "@clerk/nextjs";
 import { SignOutButton, useClerk } from "@clerk/clerk-react";
 import { useSessions } from "@/hooks/use-sessions-query";
+import { useDeepSearchSessions } from "@/hooks/use-deep-search-sessions";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -44,7 +46,7 @@ import HistoryDialog from "./HistoryDialog";
 import { Input } from "@/components/ui/input";
 import { Globe, Search, BookOpen, BlocksIcon } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { ModeToggle } from "@/components/ui/mode-toggle";
 import { Separator } from "../ui/separator";
@@ -52,30 +54,68 @@ import { Separator } from "../ui/separator";
 export default function AppSidebar() {
   const { user } = useUser();
   const { openUserProfile } = useClerk();
-  const { sessions, loading, deleteSession, updateTitle, isDeleting } =
-    useSessions();
+  const {
+    sessions: webSessions,
+    loading: webLoading,
+    deleteSession: deleteWebSession,
+    updateTitle: updateWebTitle,
+    isDeleting: isDeletingWeb,
+  } = useSessions();
+  const {
+    sessions: deepSearchSessions,
+    loading: deepLoading,
+    deleteSession: deleteDeepSearchSession,
+    updateTitle: updateDeepSearchTitle,
+    isDeleting: isDeletingDeep,
+  } = useDeepSearchSessions();
   // const pathname = usePathname();
-  const [editingSession, setEditingSession] = useState<string | null>(null);
+  const [editingSession, setEditingSession] = useState<{
+    id: string;
+    title: string;
+    type: "web" | "deep";
+  } | null>(null);
   const [editedTitle, setEditedTitle] = useState("");
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [deleteSessionId, setDeleteSessionId] = useState<string | null>(null);
+  const [deleteSessionData, setDeleteSessionData] = useState<{
+    id: string;
+    type: "web" | "deep";
+  } | null>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
-  const handleStartEdit = (sessionId: string, currentTitle: string) => {
-    setEditingSession(sessionId);
+  const handleStartEdit = (
+    sessionId: string,
+    currentTitle: string,
+    type: "web" | "deep"
+  ) => {
+    setEditingSession({ id: sessionId, title: currentTitle, type });
     setEditedTitle(currentTitle);
     setIsEditDialogOpen(true);
-    // close any open menu
   };
 
   const handleSaveEdit = async () => {
     if (!editingSession || !editedTitle.trim()) return;
 
-    updateTitle({ sessionId: editingSession, title: editedTitle.trim() });
-    setIsEditDialogOpen(false);
-    setEditingSession(null);
-    setEditedTitle("");
+    try {
+      if (editingSession.type === "web") {
+        await updateWebTitle({
+          sessionId: editingSession.id,
+          title: editedTitle.trim(),
+        });
+      } else {
+        await updateDeepSearchTitle({
+          sessionId: editingSession.id,
+          title: editedTitle.trim(),
+        });
+      }
+      setIsEditDialogOpen(false);
+      setEditingSession(null);
+      setEditedTitle("");
+      toast.success("Session title updated successfully");
+    } catch {
+      toast.error("Failed to update session title");
+    }
   };
+
   const handleCancelEdit = () => {
     setIsEditDialogOpen(false);
     setEditingSession(null);
@@ -83,11 +123,19 @@ export default function AppSidebar() {
   };
 
   const handleDeleteConfirm = async () => {
-    if (!deleteSessionId) return;
+    if (!deleteSessionData) return;
 
-    // close any open menu before deleting
-    deleteSession(deleteSessionId);
-    setDeleteSessionId(null);
+    try {
+      if (deleteSessionData.type === "web") {
+        await deleteWebSession(deleteSessionData.id);
+      } else {
+        await deleteDeepSearchSession(deleteSessionData.id);
+      }
+      setDeleteSessionData(null);
+      toast.success("Session deleted successfully");
+    } catch {
+      toast.error("Failed to delete session");
+    }
   };
 
   return (
@@ -211,7 +259,13 @@ export default function AppSidebar() {
 
       <Dialog
         open={isEditDialogOpen}
-        onOpenChange={(open) => !isDeleting && setIsEditDialogOpen(open)}
+        onOpenChange={(open) => {
+          if (!isDeletingWeb && !isDeletingDeep && !open) {
+            setIsEditDialogOpen(false);
+            setEditingSession(null);
+            setEditedTitle("");
+          }
+        }}
       >
         <DialogContent>
           <DialogHeader>
@@ -240,7 +294,7 @@ export default function AppSidebar() {
             <Button
               variant="ghost"
               onClick={handleCancelEdit}
-              disabled={isDeleting}
+              disabled={isDeletingWeb || isDeletingDeep}
             >
               Cancel
             </Button>
@@ -252,29 +306,31 @@ export default function AppSidebar() {
       </Dialog>
 
       <AlertDialog
-        open={!!deleteSessionId}
+        open={!!deleteSessionData}
         onOpenChange={(open) => {
-          if (!isDeleting && !open) {
-            setDeleteSessionId(null);
+          if (!isDeletingWeb && !isDeletingDeep && !open) {
+            setDeleteSessionData(null);
           }
         }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Chat</AlertDialogTitle>
+            <AlertDialogTitle>Delete Session</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this chat? This action cannot be
-              undone.
+              Are you sure you want to delete this session? This action cannot
+              be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeletingWeb || isDeletingDeep}>
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteConfirm}
-              disabled={isDeleting}
+              disabled={isDeletingWeb || isDeletingDeep}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {isDeleting ? "Deleting..." : "Delete"}
+              {isDeletingWeb || isDeletingDeep ? "Deleting..." : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -283,10 +339,11 @@ export default function AppSidebar() {
       <HistoryDialog
         open={isHistoryOpen}
         onOpenChange={(open) => setIsHistoryOpen(open)}
-        sessions={sessions}
-        loading={loading}
-        onEdit={(id, title) => handleStartEdit(id, title)}
-        onDelete={(id) => setDeleteSessionId(id)}
+        webSessions={webSessions}
+        deepSearchSessions={deepSearchSessions}
+        loading={webLoading || deepLoading}
+        onEdit={handleStartEdit}
+        onDelete={(id, type) => setDeleteSessionData({ id, type })}
       />
     </>
   );

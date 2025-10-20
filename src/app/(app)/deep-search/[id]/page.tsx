@@ -12,7 +12,10 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
     return notFound();
   }
 
-  // console.log("Deep Search Chat Messages:", chat.messages.length);
+  // logging last message
+
+  const lastMessage = chat.messages[chat.messages.length - 1];
+  console.log("lastMessage", lastMessage);
 
   const uiMessages = convertToDeepSearchUIMessages(chat.messages);
 

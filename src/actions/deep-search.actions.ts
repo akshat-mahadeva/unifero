@@ -71,6 +71,8 @@ export async function getDeepSearchSessionById(sessionId: string) {
         messages: {
           include: {
             DeepSearchToolSnapshot: true,
+            DeepSearchStep: true,
+            DeepSearchSource: true,
           },
           orderBy: {
             createdAt: "asc",
@@ -99,6 +101,8 @@ export async function getOrCreateDeepSearchSessionById(
       messages: {
         include: {
           DeepSearchToolSnapshot: true,
+          DeepSearchStep: true,
+          DeepSearchSource: true,
         },
         orderBy: { createdAt: "asc" as const },
       },
@@ -589,5 +593,132 @@ export const updateDeepSearchStepExecution = async (
     });
   } catch (err) {
     handleError("updateDeepSearchStepExecution", err);
+  }
+};
+
+export const saveDeepSearchSources = async (
+  messageId: string,
+  sources: {
+    name: string;
+    url: string;
+    favicon?: string;
+    content?: string;
+    images?: unknown;
+    publishedDate?: Date;
+  }[],
+  stepId?: string
+) => {
+  try {
+    if (!messageId) throw new Error("Message ID is required");
+
+    const userId = await getUserIdOrThrow();
+    const message = await prisma.deepSearchMessage.findUnique({
+      where: { id: messageId },
+      include: { session: true },
+    });
+
+    if (!message) throw new Error("Message not found");
+    if (message.session.userId !== userId) throw new Error("Not authorized");
+
+    // Verify step exists if stepId is provided
+    if (stepId) {
+      const step = await prisma.deepSearchStep.findUnique({
+        where: { id: stepId },
+      });
+      if (!step) throw new Error("Step not found");
+    }
+
+    console.log(
+      `Saving ${sources.length} sources for message ${messageId}${
+        stepId ? ` (step: ${stepId})` : ""
+      }`
+    );
+
+    // Use upsert to prevent duplicates based on url and stepId
+    const savedSources = [];
+    for (const source of sources) {
+      try {
+        // For upsert with composite unique constraint, both fields must match
+        // If stepId is provided, check for duplicates with that stepId
+        // If not provided, we'll just create (can't use unique constraint with null)
+        const existingSource = stepId
+          ? await prisma.deepSearchSource.findFirst({
+              where: {
+                url: source.url,
+                stepId: stepId,
+              },
+            })
+          : null;
+
+        let saved;
+        if (existingSource) {
+          // Update existing
+          saved = await prisma.deepSearchSource.update({
+            where: { id: existingSource.id },
+            data: {
+              name: source.name,
+              favicon: source.favicon,
+              content: source.content,
+              images: source.images
+                ? (source.images as Prisma.InputJsonValue)
+                : undefined,
+              publishedDate: source.publishedDate,
+              updatedAt: new Date(),
+            },
+          });
+        } else {
+          // Create new
+          saved = await prisma.deepSearchSource.create({
+            data: {
+              name: source.name,
+              url: source.url,
+              favicon: source.favicon,
+              content: source.content,
+              images: source.images
+                ? (source.images as Prisma.InputJsonValue)
+                : undefined,
+              publishedDate: source.publishedDate,
+              messageId,
+              stepId: stepId ?? undefined,
+            },
+          });
+        }
+        savedSources.push(saved);
+      } catch (sourceError) {
+        console.error(`Error saving source ${source.url}:`, sourceError);
+      }
+    }
+
+    return { count: savedSources.length, sources: savedSources };
+  } catch (err) {
+    handleError("saveDeepSearchSources", err);
+  }
+};
+
+export const updateDeepSearchStepReasoning = async (
+  stepId: string,
+  reasoningText: string
+) => {
+  try {
+    if (!stepId) throw new Error("Step ID is required");
+
+    const userId = await getUserIdOrThrow();
+    const step = await prisma.deepSearchStep.findUnique({
+      where: { id: stepId },
+      include: { deepSearchMessage: { include: { session: true } } },
+    });
+
+    if (!step) throw new Error("Step not found");
+    if (step.deepSearchMessage.session.userId !== userId)
+      throw new Error("Not authorized");
+
+    console.log(`Saving reasoning for step ${stepId}: ${reasoningText}`);
+
+    return await prisma.deepSearchStep.update({
+      where: { id: stepId },
+      data: { reasoningText, updatedAt: new Date() },
+    });
+  } catch (err) {
+    handleError("updateDeepSearchStepReasoning", err);
   }
 };
