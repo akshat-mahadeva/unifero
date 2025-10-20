@@ -78,6 +78,7 @@ export const convertToDeepSearchUIMessages = (
 ): DeepSearchUIMessage[] => {
   return messages.map((m) => {
     // Prisma returns capitalized property names: DeepSearchStep, DeepSearchSource
+    const isDeepSearchInitiated = m.isDeepSearchInitiated;
     const steps = m.DeepSearchStep || m.deepSearchSteps || [];
     const sources = m.DeepSearchSource || m.deepSearchSources || [];
 
@@ -86,8 +87,15 @@ export const convertToDeepSearchUIMessages = (
 
     const parts = [
       // Add deepSearchDataPart if there's deep search data
-      ...(hasDeepSearchData
+      ...(isDeepSearchInitiated
         ? [
+            {
+              type: "data-deepSearchDataPart" as const,
+              data: {
+                progress: m.progress ?? 0,
+                isDeepSearchInitiated: true,
+              },
+            },
             {
               type: "data-deepSearchDataPart" as const,
               data: {
@@ -97,9 +105,7 @@ export const convertToDeepSearchUIMessages = (
             },
           ]
         : []),
-      // Add reasoning parts from steps
       ...steps.map((step) => {
-        // Get sources for this specific step
         const stepSources = sources.filter((s) => s.stepId === step.id);
 
         return {

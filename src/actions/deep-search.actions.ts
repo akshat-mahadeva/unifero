@@ -722,3 +722,94 @@ export const updateDeepSearchStepReasoning = async (
     handleError("updateDeepSearchStepReasoning", err);
   }
 };
+
+/**
+ * Enable deep search for a message
+ * Called when sentiment analysis determines deep search is needed
+ */
+export async function enableDeepSearch(sessionId: string, messageId: string) {
+  try {
+    if (!sessionId) throw new Error("sessionId is required");
+    if (!messageId) throw new Error("messageId is required");
+
+    const userId = await getUserIdOrThrow();
+    await verifySessionOwnership(sessionId, userId);
+
+    const updated = await prisma.deepSearchMessage.update({
+      where: { id: messageId },
+      data: {
+        isDeepSearchInitiated: true,
+        progress: 0,
+        updatedAt: new Date(),
+      },
+    });
+
+    console.log(`✓ Deep search enabled for message: ${messageId}`);
+    return { success: true, message: updated };
+  } catch (err) {
+    handleError("enableDeepSearch", err);
+  }
+}
+
+/**
+ * Get all sources for a specific step
+ * Useful for displaying sources grouped by search step
+ */
+export async function getStepSources(stepId: string) {
+  try {
+    if (!stepId) throw new Error("stepId is required");
+
+    const userId = await getUserIdOrThrow();
+
+    const step = await prisma.deepSearchStep.findUnique({
+      where: { id: stepId },
+      include: {
+        deepSearchMessage: {
+          include: { session: true },
+        },
+        sources: true,
+      },
+    });
+
+    if (!step) throw new Error("Step not found");
+    if (step.deepSearchMessage.session.userId !== userId) {
+      throw new Error("Not authorized");
+    }
+
+    return step.sources;
+  } catch (err) {
+    handleError("getStepSources", err);
+  }
+}
+
+/**
+ * Get all steps for a message
+ * Useful for activity timeline display
+ */
+export async function getMessageSteps(messageId: string) {
+  try {
+    if (!messageId) throw new Error("messageId is required");
+
+    const userId = await getUserIdOrThrow();
+
+    const message = await prisma.deepSearchMessage.findUnique({
+      where: { id: messageId },
+      include: {
+        session: true,
+        DeepSearchStep: {
+          include: {
+            sources: true,
+          },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
+
+    if (!message) throw new Error("Message not found");
+    if (message.session.userId !== userId) throw new Error("Not authorized");
+
+    return message.DeepSearchStep;
+  } catch (err) {
+    handleError("getMessageSteps", err);
+  }
+}

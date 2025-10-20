@@ -25,7 +25,7 @@ import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
 import { useEffect, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { Response } from "@/components/ai-elements/response";
-import { CopyIcon } from "lucide-react";
+import { Check, CopyIcon, Loader2 } from "lucide-react";
 import { Action, Actions } from "@/components/ai-elements/actions";
 import { models } from "@/lib/models";
 import Image from "next/image";
@@ -44,7 +44,6 @@ import { Card, CardHeader } from "../ui/card";
 import { Progress } from "../ui/progress";
 import { DeepSearchUIMessage } from "@/types/deep-search";
 import { Separator } from "../ui/separator";
-import { Tool, ToolHeader } from "../ai-elements/tool";
 import DeepSearchCanvas from "./DeepSearchCanvas";
 import { Button } from "../ui/button";
 import {
@@ -235,6 +234,8 @@ const DeepSearchChat = ({
                             const progressParts = message.parts.filter(
                               (p) => p.type === "data-deepSearchDataPart"
                             );
+                            const latestProgressPart =
+                              progressParts[progressParts.length - 1];
                             const latestProgress =
                               progressParts.length > 0
                                 ? progressParts[progressParts.length - 1]
@@ -250,15 +251,83 @@ const DeepSearchChat = ({
                                     >
                                       <CardHeader>
                                         <div className="flex items-center gap-2 justify-between">
-                                          <div className="text-sm">
-                                            {latestProgress.data.progress ===
-                                            100
-                                              ? "Deep search completed"
-                                              : "Running deep search..."}
-                                            <span className="ml-2 font-medium">
-                                              {latestProgress.data.progress}%
-                                            </span>
+                                          <div className="flex items-center gap-2">
+                                            <div>
+                                              {latestProgress.data.progress ===
+                                              100 ? (
+                                                <Check className="h-4 w-4 text-primary" />
+                                              ) : (
+                                                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                                              )}
+                                            </div>
+                                            <div className="text-sm">
+                                              {latestProgress.data.progress ===
+                                              100
+                                                ? "Deep search completed"
+                                                : "Running deep search..."}
+                                              <span className="ml-2 font-medium">
+                                                {latestProgress.data.progress}%
+                                              </span>
+                                            </div>
                                           </div>
+
+                                          <Sheet
+                                            defaultOpen={
+                                              latestProgressPart.data
+                                                .messageId === message.id &&
+                                              latestProgressPart.data
+                                                .isDeepSearchInitiated
+                                            }
+                                          >
+                                            <SheetTrigger asChild>
+                                              <Button
+                                                size="sm"
+                                                variant="outline"
+                                              >
+                                                View Activity
+                                              </Button>
+                                            </SheetTrigger>
+
+                                            <SheetContent
+                                              side="right"
+                                              className="w-full sm:max-w-lg"
+                                            >
+                                              <SheetHeader>
+                                                <SheetTitle>
+                                                  Deep Search Activity
+                                                </SheetTitle>
+                                              </SheetHeader>
+                                              <DeepSearchCanvas
+                                                messageId={message.id}
+                                                reasoningParts={message.parts
+                                                  .filter(
+                                                    (part) =>
+                                                      part.type ===
+                                                      "data-deepSearchReasoningPart"
+                                                  )
+                                                  .map((part) => part.data)}
+                                                sourceParts={message.parts
+                                                  .filter(
+                                                    (part) =>
+                                                      part.type ===
+                                                      "data-deepSearchSourcePart"
+                                                  )
+                                                  .map((part) => ({
+                                                    id: part.id,
+                                                    source: {
+                                                      name: part.data.name,
+                                                      url: part.data.url,
+                                                      content:
+                                                        part.data.content,
+                                                      favicon:
+                                                        part.data.favicon,
+                                                      images: part.data.images,
+                                                    },
+                                                  }))}
+                                                initialTab="reasoning"
+                                              />
+                                            </SheetContent>
+                                          </Sheet>
                                         </div>
                                         <Separator className="my-2" />
                                         <Progress
@@ -269,19 +338,6 @@ const DeepSearchChat = ({
                                     </Card>
                                   )}
                                 {message.parts.map((part, i) => {
-                                  if (part.type === "tool-runCode") {
-                                    return (
-                                      <Tool
-                                        key={`${message.id}-${i}`}
-                                        defaultOpen={true}
-                                      >
-                                        <ToolHeader
-                                          type={part.type}
-                                          state={part.state}
-                                        />
-                                      </Tool>
-                                    );
-                                  }
                                   if (part.type === "text") {
                                     return (
                                       <Response key={`${message.id}-${i}`}>
@@ -310,52 +366,6 @@ const DeepSearchChat = ({
                               >
                                 <CopyIcon className="size-3" />
                               </Action>
-
-                              <Sheet>
-                                <SheetTrigger asChild>
-                                  <Button size="sm" variant="ghost">
-                                    View Activity
-                                  </Button>
-                                </SheetTrigger>
-
-                                <SheetContent
-                                  side="right"
-                                  className="w-full sm:max-w-lg"
-                                >
-                                  <SheetHeader>
-                                    <SheetTitle>
-                                      Deep Search Activity
-                                    </SheetTitle>
-                                  </SheetHeader>
-                                  <DeepSearchCanvas
-                                    messageId={message.id}
-                                    reasoningParts={message.parts
-                                      .filter(
-                                        (part) =>
-                                          part.type ===
-                                          "data-deepSearchReasoningPart"
-                                      )
-                                      .map((part) => part.data)}
-                                    sourceParts={message.parts
-                                      .filter(
-                                        (part) =>
-                                          part.type ===
-                                          "data-deepSearchSourcePart"
-                                      )
-                                      .map((part) => ({
-                                        id: part.id,
-                                        source: {
-                                          name: part.data.name,
-                                          url: part.data.url,
-                                          content: part.data.content,
-                                          favicon: part.data.favicon,
-                                          images: part.data.images,
-                                        },
-                                      }))}
-                                    initialTab="reasoning"
-                                  />
-                                </SheetContent>
-                              </Sheet>
                             </Actions>
                           )}
                         </MessageContent>

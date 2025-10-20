@@ -124,8 +124,10 @@ const dataPartSchema = z.object({
     type: z.literal("deep-search"),
     id: z.string(),
     progress: z.number(),
+    messageId: z.string(),
     text: z.string(),
     state: z.union([z.literal("streaming"), z.literal("done")]).optional(),
+    isDeepSearchInitiated: z.boolean().optional(),
   }),
   deepSearchReasoningPart: z.object({
     type: z.literal("deep-search-reasoning"),

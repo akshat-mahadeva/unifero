@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from "react";
-import { Check, Dot, Search } from "lucide-react";
+import { BrainCog, Check, Search, Webhook } from "lucide-react";
 import ImageWithFallback from "./ImageWithFallback";
 import { Badge } from "../ui/badge";
 import { Response } from "../ai-elements/response";
@@ -72,13 +72,15 @@ const DeepSearchCanvas = ({
                     <Search className="h-4 w-4" />
                   ) : part.reasoningType === "report" ? (
                     <Check className="h-4 w-4" />
+                  ) : part.reasoningType === "evaluate" ? (
+                    <Webhook className="h-4 w-4 " />
                   ) : (
-                    <Dot className="h-4 w-4" />
+                    <BrainCog className="h-4 w-4" />
                   );
                 return (
                   <div key={index} className="border rounded p-3">
                     <div className="flex items-center gap-2 mb-2">
-                      {icon}
+                      <span className=" text-primary">{icon}</span>
                       <span className="font-medium capitalize">
                         {part.reasoningType}
                       </span>

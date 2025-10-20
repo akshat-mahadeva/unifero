@@ -5,6 +5,7 @@ import {
   createAssistantMessage,
   updateAssistantMessageContent,
   updateActiveStreamId,
+  updateDeepSearchMessageProgress,
 } from "@/actions/deep-search.actions";
 
 import {
@@ -19,8 +20,8 @@ import { createResumableStreamContext } from "resumable-stream";
 import { after } from "next/server";
 import { DeepSearchUIMessage } from "@/types/deep-search";
 import { openai } from "@ai-sdk/openai";
-import { extractTextFromMessage, sanitizeMessages } from "@/lib/safe-messages";
-import { getTools } from "@/lib/agent/deep-search";
+import { sanitizeMessages } from "@/lib/safe-messages";
+import { getTools, ProgressCalculator } from "@/lib/agent/deep-search";
 
 export async function POST(req: Request) {
   try {
@@ -57,48 +58,149 @@ export async function POST(req: Request) {
     const stream = createUIMessageStream<DeepSearchUIMessage>({
       generateId: () => assistantMessageId,
       execute: async ({ writer }) => {
-        const codeAgent = streamText({
+        // Initialize progress calculator
+        const progressCalc = new ProgressCalculator();
+
+        // Track execution state
+        let isDeepSearch = false;
+        let totalSteps = 0;
+        let completedSteps = 0;
+
+        const agent = streamText({
           model: openai("gpt-4o-mini"),
           messages: [
             {
               role: "system",
-              content: `You are a Deep Search AI assistant. Your job is to perform comprehensive research on user queries.
+              content: `
+You are an intelligent research assistant.
 
-IMPORTANT: When a user asks a question, you MUST:
-1. First, use the sentimentAnalysisTool to analyze the query
-2. Then, use the webSearchTool to search for relevant information (MANDATORY for every query)
-3. After gathering information, use analyseAndEvaluateTool to analyze the findings
-4. Finally, use generateReportTool to create a comprehensive response
+WORKFLOW:
+1. ALWAYS call analyzeQueryTool first to assess the query
+2. Based on analysis:
+   - If needsDeepSearch = false: Answer directly using your knowledge
+   - If needsDeepSearch = true: Execute this sequence:
+     a) Call searchWebTool for each suggested search query (usually 2-3)
+     b) Call synthesizeTool once to analyze findings
+     c) Call generateReportTool once for final response
 
-DO NOT just respond with text. You MUST use the tools in sequence to perform proper deep search.
-Always start by calling webSearchTool with the user's query to gather information.`,
+RULES:
+- analyzeQueryTool: Required first call and only call once
+- searchWebTool: Only if deep search needed, pass originalQuery for context
+- synthesizeTool: Only after all searches complete
+- generateReportTool: Only after synthesis
+- If no deep search needed, just provide a helpful direct answer
+
+Do not call unnecessary tools. Be efficient.
+`,
             },
             ...convertedMessages,
           ],
-          tools: getTools(writer, sessionId, assistantMessageId),
-          stopWhen: stepCountIs(8),
-          onStepFinish: ({ toolCalls }) => {
+          tools: getTools(writer, sessionId, assistantMessageId, progressCalc),
+          stopWhen: stepCountIs(10),
+          onStepFinish: async ({ toolCalls, toolResults, finishReason }) => {
+            completedSteps++;
+
+            console.log(
+              `[STEP ${completedSteps}] Finished - Reason: ${finishReason}`
+            );
+
             for (const toolCall of toolCalls) {
-              if (toolCall.toolName) {
-                console.log("Tool executed:", toolCall.toolName);
+              console.log(`  Tool: ${toolCall.toolName}`);
+
+              // Check if this was the analysis tool
+              if (toolCall.toolName === "analyzeQueryTool") {
+                const result = toolResults.find(
+                  (r) => r.toolCallId === toolCall.toolCallId
+                );
+
+                if (result?.output) {
+                  const analysisResult = result.output as {
+                    needsDeepSearch: boolean;
+                    searchQueries?: string[];
+                  };
+
+                  isDeepSearch = analysisResult.needsDeepSearch;
+
+                  if (isDeepSearch) {
+                    // Calculate total steps: analysis + searches + synthesis + report
+                    const searchCount =
+                      analysisResult.searchQueries?.length || 1;
+                    totalSteps = 1 + searchCount + 2; // 1 analysis + N searches + 1 synthesis + 1 report
+
+                    console.log(
+                      `[PLANNING] Deep search with ${searchCount} searches (${totalSteps} total steps)`
+                    );
+                  } else {
+                    // Simple response - just analysis + direct answer
+                    totalSteps = 1;
+                    console.log("[PLANNING] Simple response - no deep search");
+
+                    // Mark as complete immediately
+                    await updateDeepSearchMessageProgress(
+                      sessionId,
+                      assistantMessageId,
+                      100,
+                      true
+                    );
+                  }
+                }
               }
+            }
+
+            // Log progress
+            if (totalSteps > 0 && isDeepSearch) {
+              const estimatedProgress = Math.min(
+                95,
+                Math.floor((completedSteps / totalSteps) * 100)
+              );
+              console.log(
+                `[PROGRESS] ${estimatedProgress}% (${completedSteps}/${totalSteps} steps)`
+              );
+            }
+          },
+
+          onFinish: async ({ text, toolCalls, finishReason }) => {
+            console.log(
+              `[FINISH] Reason: ${finishReason}, Tool calls: ${toolCalls.length}`
+            );
+
+            // Save final text content
+            if (text) {
+              await updateAssistantMessageContent(assistantMessageId, text);
+            }
+
+            // Ensure 100% completion
+            if (isDeepSearch) {
+              await updateDeepSearchMessageProgress(
+                sessionId,
+                assistantMessageId,
+                100,
+                true
+              );
+
+              // Send final completion event
+              writer.write({
+                type: "data-deepSearchDataPart",
+                id: `final-${Date.now()}`,
+                data: {
+                  progress: 100,
+                  messageId: assistantMessageId,
+                  text: "Complete",
+                  state: "done",
+                  isDeepSearchInitiated: true,
+                  type: "deep-search",
+                  id: "",
+                },
+              });
             }
           },
         });
 
-        writer.merge(codeAgent.toUIMessageStream());
+        writer.merge(agent.toUIMessageStream());
       },
+
       onFinish: async ({ messages }) => {
-        const assistantMessages = messages.filter(
-          (m) => m.role === "assistant"
-        );
-
-        if (assistantMessages.length > 0) {
-          const textContent = extractTextFromMessage(assistantMessages[0]);
-
-          await updateAssistantMessageContent(assistantMessageId, textContent);
-        }
-
+        console.log("[STREAM] Complete - Messages:", messages.length);
         await updateActiveStreamId(sessionId, null);
       },
     });
