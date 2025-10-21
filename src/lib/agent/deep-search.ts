@@ -27,13 +27,10 @@ export function getTools(
   // Tool 1: Analyze query to determine approach
   const analyzeQueryTool = tool({
     description:
-      "Analyze the user's query to determine if deep research is needed or if a simple response is sufficient. MUST be called first for every query.",
+      "Analyze query to check if deep research needed. Call first always.",
     inputSchema: z.object({
-      query: z.string().describe("The user's original question"),
-      reasoning: z
-        .string()
-        .optional()
-        .describe("Optional reasoning for analysis"),
+      query: z.string().describe("User's question"),
+      reasoning: z.string().optional().describe("Optional reasoning"),
     }),
     execute: async ({ query, reasoning }) => {
       const step = await createDeepSearchStep({
@@ -61,24 +58,21 @@ export function getTools(
 
       const { object } = await generateObject({
         model: openai("gpt-4o-mini"),
-        system: `Analyze if this query requires deep web research or can be answered directly.
+        system: `Decide if query needs deep web search.
 
 NEEDS DEEP SEARCH:
-- Current/recent events or news
-- Questions requiring multiple authoritative sources
-- Research topics needing comprehensive analysis
-- Explicit requests for detailed investigation or deep search
-- Questions about recent developments (2024-2025)
-- Explicit phrases like "do a deep search", "research this", "generate a report"
-- Any query that seems to want detailed, sourced information
+- Recent events/news (2024-2025)
+- Multiple sources needed
+- Research/deep investigation
+- Phrases like "deep search", "research", "report"
 
-CAN ANSWER DIRECTLY (only if clearly trivial):
-- Greetings and casual conversation (e.g., "hello", "how are you?")
-- Questions about yourself as an AI
-- Very simple factual queries with stable answers
+ANSWER DIRECTLY:
+- Greetings
+- Simple facts
+- About yourself
 
-Default to deep search for any uncertainty or research-oriented queries.`,
-        prompt: `Query: "${query}"\n\nAnalyze this query.`,
+Default to deep search if unsure.`,
+        prompt: `Query: "${query}"`,
         schema: z.object({
           needsDeepSearch: z.boolean(),
           searchQueries: z
@@ -111,13 +105,18 @@ Default to deep search for any uncertainty or research-oriented queries.`,
   });
 
   const webSearchTool = tool({
-    description:
-      "Search the web for current information. Only call if analyzeQueryTool determined deep search is needed.",
+    description: "Search web for info. Call only if deep search needed.",
     inputSchema: z.object({
-      query: z.string().max(100).describe("Specific search query"),
-      originalQuery: z.string().describe("User's original question"),
+      query: z.string().max(100).describe("Search query"),
+      originalQuery: z.string().describe("Original question"),
+      numberOfResults: z
+        .number()
+        .min(1)
+        .max(5)
+        .optional()
+        .describe("Results count (default 2)"),
     }),
-    execute: async ({ query, originalQuery }) => {
+    execute: async ({ query, originalQuery, numberOfResults }) => {
       const step = await createDeepSearchStep({
         sessionId,
         messageId,
@@ -142,7 +141,11 @@ Default to deep search for any uncertainty or research-oriented queries.`,
         },
       });
 
-      const initialResponse = await uniferoWebSearch(query, 5);
+      const safeNumberOfResults = numberOfResults ?? 2;
+      const initialResponse = await uniferoWebSearch(
+        query,
+        safeNumberOfResults > 5 ? 5 : safeNumberOfResults
+      );
 
       // check the response title is not empty
       const response = initialResponse.results.filter(
@@ -228,15 +231,11 @@ Default to deep search for any uncertainty or research-oriented queries.`,
 
   // Tool 3: Synthesize findings
   const synthesizeTool = tool({
-    description:
-      "Analyze and synthesize all search results. Call after all searches complete.",
+    description: "Synthesize search results. Call after all searches.",
     inputSchema: z.object({
       originalQuery: z.string(),
-      findings: z.string().describe("All search results combined"),
-      reasoning: z
-        .string()
-        .optional()
-        .describe("Optional reasoning for synthesis"),
+      findings: z.string().describe("Combined search results"),
+      reasoning: z.string().optional().describe("Optional reasoning"),
     }),
     execute: async ({ originalQuery, findings, reasoning }) => {
       const step = await createDeepSearchStep({
@@ -265,10 +264,10 @@ Default to deep search for any uncertainty or research-oriented queries.`,
         model: openai("gpt-4o-mini"),
         prompt: `Question: "${originalQuery}"
 
-Research findings:
+Findings:
 ${findings.slice(0, 2000)}
 
-Extract 3-5 key insights that directly answer the question.`,
+Extract 3-5 key insights.`,
         schema: z.object({
           insights: z.array(z.string()).min(2).max(5),
           synthesis: z.string().max(250),
@@ -276,7 +275,10 @@ Extract 3-5 key insights that directly answer the question.`,
       });
 
       if (step) {
-        await updateDeepSearchStepReasoning(step.id, object.synthesis);
+        await updateDeepSearchStepReasoning(
+          step.id,
+          object.synthesis || "Analysing results..."
+        );
 
         // Mark step as complete and emit progress
         await (await progressManager).completeStep(step.id);
@@ -295,8 +297,7 @@ Extract 3-5 key insights that directly answer the question.`,
 
   // Tool 4: Generate final report
   const generateReportTool = tool({
-    description:
-      "Create comprehensive response based on synthesis. Call this last to complete deep search.",
+    description: "Create final response from synthesis. Call last.",
     inputSchema: z.object({
       originalQuery: z.string(),
       synthesis: z.string(),
@@ -327,14 +328,14 @@ Extract 3-5 key insights that directly answer the question.`,
 
       const { text } = await generateText({
         model: openai("gpt-4o-mini"),
-        prompt: `Create a comprehensive response to: "${originalQuery}"
+        prompt: `Answer: "${originalQuery}"
 
-Key insights:
+Insights:
 ${insights.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
 
 Synthesis: ${synthesis}
 
-Format as clear, informative response with markdown structure.`,
+Provide clear response with markdown.`,
       });
 
       // Stream report

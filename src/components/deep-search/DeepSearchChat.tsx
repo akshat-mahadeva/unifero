@@ -71,6 +71,9 @@ const DeepSearchChat = ({
   const pathname = usePathname();
   const [hasOpengingDeepSearch] = useState(false);
 
+  // State to track which message's sheet should be open
+  const [openSheetId, setOpenSheetId] = useState<string | null>(null);
+
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
@@ -155,6 +158,18 @@ const DeepSearchChat = ({
         toast.error(error.message);
       } else {
         toast.error("An unexpected error occurred. Please try again.");
+      }
+    },
+    onData: (dataPart) => {
+      // Handle incoming data parts in real-time
+      console.log("Received data part:", dataPart);
+
+      // Specifically handle deep search progress parts
+      if (dataPart.type === "data-deepSearchDataPart") {
+        console.log("Deep search progress update:", dataPart.data);
+
+        // Auto-open the sheet when deep search progress starts (first progress event)
+        setOpenSheetId(dataPart.data.messageId);
       }
     },
   });
@@ -300,10 +315,7 @@ const DeepSearchChat = ({
 
                                           <Sheet
                                             defaultOpen={
-                                              latestProgressPart.data
-                                                .messageId === message.id &&
-                                              latestProgressPart.data
-                                                .isDeepSearchInitiated
+                                              openSheetId === message.id
                                             }
                                           >
                                             <SheetTrigger asChild>

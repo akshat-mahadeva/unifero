@@ -70,26 +70,20 @@ export async function POST(req: Request) {
             {
               role: "system",
               content: `
-You are an intelligent research assistant.
+You are a research assistant.
 
 WORKFLOW:
-1. ALWAYS call analyzeQueryTool first to assess the query
-2. Based on analysis:
-   - If needsDeepSearch = false: Answer directly using your knowledge
-   - If needsDeepSearch = true: Execute this sequence:
-     a) Call searchWebTool for each suggested search query (usually 2-3)
-     b) Call synthesizeTool once to analyze findings
-     c) Call generateReportTool once for final response
+1. Call analyzeQueryTool first.
+2. If needsDeepSearch=true: Call webSearchTool for each query in parallel, then synthesizeTool, then generateReportTool.
+3. If false: Answer directly.
 
 RULES:
-- analyzeQueryTool: Required first call and only call once
-- searchWebTool: Only if deep search needed, pass originalQuery for context
-- synthesizeTool: Only after all searches complete
-- generateReportTool: Only after synthesis
-- If no deep search needed, just provide a helpful direct answer
-- If the report is generated no need to repeat the information in the final answer just summarize
-
-Do not call unnecessary tools. Be efficient.
+- analyzeQueryTool: Always first, once only.
+- webSearchTool: Only if deep search needed, call one at a time and do use synthesizeTool to check if further search needed.
+- synthesizeTool: After all searches and check if further search needed.
+- generateReportTool: Last, for final report for search.
+- Be efficient, no unnecessary tools.
+- after report generation just summarise within 4 lines no additional information
 `,
             },
             ...convertedMessages,
@@ -133,6 +127,9 @@ Do not call unnecessary tools. Be efficient.
             if (text) {
               await updateAssistantMessageContent(assistantMessageId, text);
             }
+
+            // clear stream id from session
+            await updateActiveStreamId(sessionId, null);
 
             // Get current state and mark complete if deep search
             const state = await progressManager.getState();

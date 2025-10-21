@@ -71,7 +71,9 @@ export async function getDeepSearchSessionById(sessionId: string) {
         messages: {
           include: {
             DeepSearchToolSnapshot: true,
-            DeepSearchStep: true,
+            DeepSearchStep: {
+              orderBy: { createdAt: "asc" as const },
+            },
             DeepSearchSource: true,
           },
           orderBy: {
@@ -101,7 +103,9 @@ export async function getOrCreateDeepSearchSessionById(
       messages: {
         include: {
           DeepSearchToolSnapshot: true,
-          DeepSearchStep: true,
+          DeepSearchStep: {
+            orderBy: { createdAt: "asc" as const },
+          },
           DeepSearchSource: true,
         },
         orderBy: { createdAt: "asc" as const },

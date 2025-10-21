@@ -14,6 +14,9 @@ export async function GET(
     `GET /api/deep-search/${sessionId}/stream - Attempting to resume stream`
   );
 
+  // Add 2 seconds delay to simulate network latency for testing
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+
   // Load session data
   const session = await getDeepSearchSessionById(sessionId);
   console.log(`Session loaded:`, {

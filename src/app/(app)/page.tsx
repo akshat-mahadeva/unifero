@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
 const page = () => {
-  return redirect("/deep-search");
+  return redirect("/web-search");
 };
 
 export default page;
