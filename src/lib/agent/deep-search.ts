@@ -5,17 +5,11 @@ import {
 } from "@/actions/deep-search.actions";
 import { openai } from "@ai-sdk/openai";
 import { generateObject, generateText, tool, UIMessageStreamWriter } from "ai";
-// import Exa from "exa-js";
 import z from "zod";
 import { DeepSearchStepType } from "@/types/deep-search";
 import { randomUUID } from "crypto";
 import { createProgressManager } from "./progress-manager";
-import { tavily } from "@tavily/core";
 import { uniferoWebSearch } from "../tools/uniferoSearch";
-
-// export const exa = new Exa(process.env.EXA_API_KEY!);
-
-export const tavilyClient = tavily({ apiKey: process.env.TAVILY_API_KEY! });
 
 export function getTools(
   writer: UIMessageStreamWriter,
