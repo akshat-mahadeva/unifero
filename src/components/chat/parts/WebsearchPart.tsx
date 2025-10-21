@@ -82,11 +82,25 @@ export const WebSearchUIRenderer = ({
                   </Avatar>
                   <div>
                     <Link href={source.url}>
-                      <CardTitle className=" text-sm">{source.title}</CardTitle>
+                      <CardTitle className=" text-sm hover:underline">
+                        {source.title}
+                      </CardTitle>
                     </Link>
-                    <Response className=" text-sm text-muted-foreground">
-                      {source.text.replace(/\n/g, "").slice(0, 200)}
-                    </Response>
+                    <div>
+                      <Response
+                        components={{
+                          h1: (props) => <h1 className="text-sm" {...props} />,
+                          h2: (props) => <h2 className="text-sm" {...props} />,
+                          h3: (props) => <h3 className="text-sm" {...props} />,
+                          p: (props) => <p className="text-sm" {...props} />,
+                        }}
+                        className=" text-sm text-muted-foreground"
+                      >
+                        {`${source.text.replace(/\n/g, "").slice(0, 200)}${
+                          source.text.length > 200 ? "..." : ""
+                        }`}
+                      </Response>
+                    </div>
                   </div>
                 </Card>
               ))

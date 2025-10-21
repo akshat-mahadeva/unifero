@@ -4,6 +4,7 @@ import { BrainCog, Check, Search, Webhook } from "lucide-react";
 import ImageWithFallback from "./ImageWithFallback";
 import { Badge } from "../ui/badge";
 import { Response } from "../ai-elements/response";
+import Link from "next/link";
 
 const DeepSearchCanvas = ({
   reasoningParts,
@@ -94,18 +95,20 @@ const DeepSearchCanvas = ({
                       <div className="text-sm mb-2">
                         <div className="flex flex-wrap gap-2 mt-1">
                           {part.search.map((item, i) => (
-                            <Badge key={i} className="flex items-center gap-1">
-                              {item.favicon && (
-                                <ImageWithFallback
-                                  src={item.favicon}
-                                  alt={item.title}
-                                  width={16}
-                                  height={16}
-                                  className="w-3 h-3"
-                                />
-                              )}
-                              <span className="text-xs">{item.title}</span>
-                            </Badge>
+                            <Link key={i} href={item.url}>
+                              <Badge className="flex items-center bg-accent hover:text-primary gap-1 hover:bg-secondary">
+                                {item.favicon && (
+                                  <ImageWithFallback
+                                    src={item.favicon}
+                                    alt={item.title}
+                                    width={16}
+                                    height={16}
+                                    className="w-3 h-3"
+                                  />
+                                )}
+                                <span className="text-xs">{item.title}</span>
+                              </Badge>
+                            </Link>
                           ))}
                         </div>
                       </div>
