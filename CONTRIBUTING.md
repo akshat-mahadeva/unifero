@@ -30,8 +30,13 @@ We use GitHub to host code, to track issues and feature requests, as well as acc
 - Node.js 18+
 - PostgreSQL database
 - OpenAI API key
-- Exa API key
+- **Unifero CLI endpoint** (for web search functionality)
 - Clerk account for authentication
+
+**Note**: The Unifero CLI is our custom web search tool. For development, you can:
+
+- Use our hosted endpoint: `https://unifero-cli.vercel.app/process`
+- Or set up your own instance from [unifero-cli](https://github.com/yourusername/unifero-cli)
 
 ### Local Development
 
@@ -62,12 +67,65 @@ We use GitHub to host code, to track issues and feature requests, as well as acc
    npx prisma db push
    ```
 
-5. **Start development server**:
+### Unifero CLI Setup
+
+For full development access to search features, you'll need the Unifero CLI:
+
+1. **Clone the CLI repository**:
+
    ```bash
-   npm run dev
+   git clone https://github.com/yourusername/unifero-cli.git
+   cd unifero-cli
+   npm install
    ```
 
-## 📝 Coding Standards
+2. **Set up the CLI**:
+
+   ```bash
+   npm run dev  # This will start the CLI server
+   ```
+
+3. **Update your .env.local** in the main project:
+   ```env
+   UNIFERO_WEB_SEARCH_URL="http://localhost:3001/process"  # CLI dev server
+   ```
+
+**Alternative**: Use our hosted CLI endpoint for basic development:
+
+```env
+UNIFERO_WEB_SEARCH_URL="https://unifero-cli.vercel.app/process"
+```
+
+## 🔬 Understanding the Deep Search Architecture
+
+Unifero uses an advanced multi-step research system powered by our custom Unifero CLI tool. Here's how it works:
+
+### Research Workflow
+
+1. **Query Analysis** (`analyzeQueryTool`) - AI determines if deep research is needed
+2. **Parallel Web Search** (`webSearchTool`) - Multiple searches using Unifero CLI
+3. **Synthesis** (`synthesizeTool`) - AI combines and analyzes findings
+4. **Report Generation** (`generateReportTool`) - Creates comprehensive responses
+
+### Key Files
+
+- `src/lib/agent/deep-search.ts` - Main research orchestration
+- `src/lib/tools/uniferoSearch.ts` - Unifero CLI integration
+- `src/actions/deep-search.actions.ts` - Database operations
+- `src/types/deep-search.ts` - Type definitions
+
+### Unifero CLI Tool
+
+Our web search is powered by the **Unifero CLI** - an open-source web scraping and search tool. Contributors can help improve:
+
+- **Search algorithms** - Better result ranking and relevance
+- **Web scraping** - Improved data extraction and parsing
+- **Performance** - Faster search and caching mechanisms
+- **New sources** - Integration with additional data providers
+
+**Contributing to Unifero CLI**: Check out [unifero-cli](https://github.com/yourusername/unifero-cli) for the separate repository.
+
+## �📝 Coding Standards
 
 ### Code Style
 
@@ -91,6 +149,52 @@ We use GitHub to host code, to track issues and feature requests, as well as acc
 - Implement **comprehensive error handling**
 - Follow **RESTful conventions**
 - Add **rate limiting** for production endpoints
+
+## 🚀 Getting Started with Development
+
+### Quick Setup for Contributors
+
+1. **Environment Setup**:
+
+   ```bash
+   git clone https://github.com/yourusername/unifero.git
+   cd unifero
+   npm install
+   cp .env.example .env.local
+   # Fill in your API keys
+   ```
+
+2. **Database & Start**:
+   ```bash
+   npx prisma generate && npx prisma db push
+   npm run dev
+   ```
+
+### Understanding the Codebase
+
+- **Frontend**: Next.js 15 with App Router, TypeScript, Tailwind CSS
+- **Backend**: Next.js API routes with Prisma ORM
+- **AI Layer**: Vercel AI SDK with custom tools and agents
+- **Search**: Custom Unifero CLI tool for web scraping
+- **UI**: shadcn/ui components with Radix UI primitives
+
+### Development Workflow
+
+1. **Pick an issue** from our [GitHub Issues](https://github.com/yourusername/unifero/issues)
+2. **Create a branch**: `git checkout -b feature/your-feature-name`
+3. **Make changes** following our coding standards
+4. **Test thoroughly** - manual testing required currently
+5. **Submit PR** with clear description and screenshots if UI changes
+
+### Testing Your Changes
+
+Since we don't have automated tests yet, please:
+
+- Test in multiple browsers (Chrome, Firefox, Safari)
+- Test on different screen sizes
+- Test error scenarios and edge cases
+- Verify database operations work correctly
+- Test both regular chat and deep search modes
 
 ## 🧪 Testing
 
@@ -152,6 +256,27 @@ We welcome feature requests! Please provide:
 - **Proposed implementation** (if you have ideas)
 - **Mockups or examples** (if applicable)
 
+**Deep Search Feature Template:**
+
+```markdown
+**Feature: [Brief title]**
+
+**Problem:**
+What problem does this solve in the deep search workflow?
+
+**Proposed Solution:**
+How should this feature work?
+
+**Technical Details:**
+
+- Which tool/agent would this affect? (analyzeQueryTool, webSearchTool, etc.)
+- Any new dependencies needed?
+- Performance considerations?
+
+**Example Usage:**
+Describe how users would interact with this feature.
+```
+
 ## 🎯 Areas for Contribution
 
 We especially welcome contributions in these areas:
@@ -159,23 +284,26 @@ We especially welcome contributions in these areas:
 ### High Priority
 
 - 🧪 **Testing infrastructure** (unit tests, integration tests)
-- 🔍 **Search improvements** (better query processing, result ranking)
+- 🔍 **Search improvements** (better query processing, result ranking in Unifero CLI)
+- 🤖 **AI Agent enhancements** (improve reasoning, add new tools, optimize workflows)
 - 🎨 **UI/UX enhancements** (accessibility, mobile optimization)
-- 📊 **Performance optimizations** (caching, lazy loading)
+- 📊 **Performance optimizations** (caching, lazy loading, streaming improvements)
 
 ### Medium Priority
 
 - 🌐 **Internationalization** (i18n support)
-- 🔌 **Plugin system** (extensible tool integration)
+- 🔌 **Plugin system** (extensible tool integration for custom AI capabilities)
 - 📈 **Analytics and monitoring** (usage tracking, error reporting)
-- 🎛️ **Admin dashboard** (user management, system health)
+- 🎛️ **Admin dashboard** (user management, system health monitoring)
+- 🔬 **Deep Search features** (new research modes, advanced filtering, source verification)
 
 ### Nice to Have
 
 - 📱 **Mobile app** (React Native or Progressive Web App)
-- 🤖 **AI model alternatives** (Claude, Gemini, local models)
+- 🤖 **AI model alternatives** (Claude, Gemini, local models integration)
 - 🔊 **Voice interface** (speech-to-text, text-to-speech)
-- 📊 **Advanced search features** (filters, date ranges, sources)
+- 📊 **Advanced search features** (filters, date ranges, custom sources)
+- 🛠️ **Unifero CLI improvements** (new search providers, better parsing, API enhancements)
 
 ## 📚 Documentation Contributions
 
@@ -252,6 +380,26 @@ Contributors will be recognized in:
 - **GitHub Issues**: For bug reports and feature requests
 - **Discord**: [Join our Discord](https://discord.gg/unifero) for real-time chat
 - **Twitter**: Follow [@unifero](https://twitter.com/unifero) for updates
+
+### Getting Help
+
+- **Beginners**: Start with [good first issues](https://github.com/yourusername/unifero/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
+- **Deep Search**: Check issues labeled `deep-search` or `ai-agent`
+- **Documentation**: Help improve our docs - they're always needed!
+- **Discord Channels**:
+  - `#general` - General discussion
+  - `#development` - Technical discussions
+  - `#deep-search` - AI and search algorithm discussions
+  - `#contributors` - Getting started and contribution help
+
+### Recognition
+
+Contributors will be recognized in:
+
+- **README.md** contributors section
+- **Release notes** for significant contributions
+- **Project discussions** and announcements
+- **Discord contributor role** for active contributors
 
 ## 📞 Need Help?
 

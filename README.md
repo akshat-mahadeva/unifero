@@ -17,7 +17,8 @@
 
 ## ✨ Features
 
-- 🔍 **Real-time Web Search** - Powered by Exa API for the most current information
+- 🔍 **Real-time Web Search** - Powered by our custom Unifero CLI tool for comprehensive web scraping
+- 🔬 **Deep Research Mode** - Advanced multi-step research with intelligent query analysis, parallel web searches, and synthesis
 - 🤖 **AI Assistant** - OpenAI integration with intelligent search decision-making
 - 💬 **Conversational Interface** - Natural chat experience with context awareness
 - 🔐 **User Authentication** - Secure authentication with Clerk
@@ -25,6 +26,7 @@
 - 🎨 **Modern UI** - Beautiful, responsive design with shadcn/ui components
 - ⚡ **Real-time Streaming** - Live response streaming for better UX
 - 🌐 **Search-First Approach** - Optimized to prioritize web search for factual queries
+- 🛠️ **Extensible Tool System** - Plugin architecture for custom search tools and AI capabilities
 
 ## 🚀 Quick Start
 
@@ -91,8 +93,8 @@ DIRECT_URL="postgresql://username:password@localhost:5432/unifero"
 # OpenAI
 OPENAI_API_KEY="sk-..."
 
-# Exa Search API
-EXA_API_KEY="your-exa-api-key"
+# Unifero Web Search (Custom CLI Tool)
+UNIFERO_WEB_SEARCH_URL="https://your-unifero-cli-endpoint.vercel.app/process"
 
 # Clerk Authentication
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="pk_..."
@@ -122,7 +124,7 @@ NODE_ENV="development"
 - **Database**: PostgreSQL with Prisma ORM
 - **Authentication**: Clerk
 - **AI Integration**: Vercel AI SDK + OpenAI
-- **Search**: Exa API
+- **Search**: Custom Unifero CLI Tool (open source web scraping)
 
 ### Development
 
@@ -130,7 +132,34 @@ NODE_ENV="development"
 - **Linting**: ESLint
 - **Database Migrations**: Prisma
 
-## 📖 Documentation
+## � Deep Search Architecture
+
+Unifero features an advanced deep research system that intelligently analyzes queries and performs multi-step web research:
+
+### How It Works
+
+1. **Query Analysis** - AI determines if deep research is needed vs. direct answers
+2. **Parallel Web Search** - Multiple search queries executed simultaneously using our custom Unifero CLI tool
+3. **Intelligent Synthesis** - AI synthesizes findings from multiple sources
+4. **Comprehensive Reporting** - Generates detailed reports with citations and sources
+
+### Key Components
+
+- **Deep Search Agent** (`/src/lib/agent/deep-search.ts`) - Orchestrates the research workflow
+- **Unifero CLI Tool** - Custom web scraping and search tool (open source)
+- **Progress Tracking** - Real-time progress updates during research
+- **Source Management** - Citation tracking and source verification
+
+### Contributing to Deep Search
+
+The deep search system is designed to be extensible. Contributors can:
+
+- **Improve search algorithms** - Better query generation and result ranking
+- **Add new search tools** - Integrate additional data sources
+- **Enhance AI reasoning** - Improve query analysis and synthesis
+- **Optimize performance** - Parallel processing and caching improvements
+
+## �📖 Documentation
 
 ### API Endpoints
 
@@ -147,9 +176,11 @@ The application uses three main models:
 ### Key Components
 
 - **Chat Interface** (`/src/components/chat/`) - Main chat UI
+- **Deep Search UI** (`/src/components/deep-search/`) - Advanced research interface
 - **AI Elements** (`/src/components/ai-elements/`) - AI-specific UI components
-- **Web Search Tool** (`/src/lib/tools/search.ts`) - Exa API integration
-- **Database Actions** (`/src/actions/chat.actions.ts`) - Database operations
+- **Unifero Search Tool** (`/src/lib/tools/uniferoSearch.ts`) - Custom web scraping integration
+- **Deep Search Agent** (`/src/lib/agent/deep-search.ts`) - Research orchestration
+- **Database Actions** (`/src/actions/`) - Database operations
 
 ## 🤝 Contributing
 
@@ -194,7 +225,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🙏 Acknowledgments
 
 - [Vercel AI SDK](https://sdk.vercel.ai) for AI integration
-- [Exa](https://exa.ai) for powerful web search capabilities
+- [Unifero CLI](https://github.com/yourusername/unifero-cli) - Our custom open-source web search tool
 - [Clerk](https://clerk.com) for authentication
 - [shadcn/ui](https://ui.shadcn.com) for beautiful UI components
 - [Prisma](https://prisma.io) for database management
