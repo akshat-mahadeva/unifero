@@ -1,7 +1,7 @@
-import React from "react";
+import { redirect } from "next/navigation";
 
 const page = () => {
-  return <div>Deep Search Page</div>;
+  return redirect("/deep-search");
 };
 
 export default page;

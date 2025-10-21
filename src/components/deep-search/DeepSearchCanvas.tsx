@@ -136,33 +136,21 @@ const DeepSearchCanvas = ({
                           className="w-4 h-4"
                         />
                       )}
-                      <a
-                        href={source.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-medium hover:underline"
-                      >
-                        {source.name}
-                      </a>
+                      <div>
+                        <a
+                          href={source.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-medium hover:underline"
+                        >
+                          {source.name}
+                        </a>
+                      </div>
                     </div>
                     {source.content && (
                       <p className="text-sm text-muted-foreground">
-                        {source.content}
+                        {source.content.slice(0, 100)}
                       </p>
-                    )}
-                    {source.images && source.images.length > 0 && (
-                      <div className="mt-2 flex gap-2">
-                        {source.images.map((img: string, i: number) => (
-                          <ImageWithFallback
-                            key={i}
-                            src={img}
-                            alt=""
-                            width={64}
-                            height={64}
-                            className="w-16 h-16 object-cover rounded"
-                          />
-                        ))}
-                      </div>
                     )}
                   </div>
                 );

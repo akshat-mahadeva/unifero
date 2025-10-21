@@ -5,9 +5,6 @@ import {
   createAssistantMessage,
   updateAssistantMessageContent,
   updateActiveStreamId,
-  updateDeepSearchMessageProgress,
-  calculateMessageProgress,
-  syncMessageProgress,
 } from "@/actions/deep-search.actions";
 
 import {
@@ -23,8 +20,9 @@ import { createResumableStreamContext } from "resumable-stream";
 import { after } from "next/server";
 import { DeepSearchUIMessage } from "@/types/deep-search";
 import { openai } from "@ai-sdk/openai";
-import { getTools, ProgressCalculator } from "@/lib/agent/deep-search";
+import { getTools } from "@/lib/agent/deep-search";
 import { convertToDeepSearchUIMessages } from "@/lib/convertToUIMessage";
+import { createProgressManager } from "@/lib/agent/progress-manager";
 
 export async function POST(req: Request) {
   try {
@@ -56,17 +54,15 @@ export async function POST(req: Request) {
     );
     const convertedMessages = convertToModelMessages(safeMessages);
 
-    const streamId = generateId();
-
-    const userStopSignal = new AbortController();
-
-    await updateActiveStreamId(sessionId, streamId);
-
     const stream = createUIMessageStream<DeepSearchUIMessage>({
       generateId: () => assistantMessageId,
+      originalMessages: safeMessages,
       execute: async ({ writer }) => {
-        // Initialize progress calculator
-        const progressCalc = new ProgressCalculator();
+        // Initialize progress manager
+        const progressManager = await createProgressManager(
+          assistantMessageId,
+          sessionId
+        );
 
         const agent = streamText({
           model: openai("gpt-4o-mini"),
@@ -98,35 +94,14 @@ Do not call unnecessary tools. Be efficient.
             },
             ...convertedMessages,
           ],
-          tools: getTools(writer, sessionId, assistantMessageId, progressCalc),
-          abortSignal: userStopSignal.signal,
+          tools: getTools(writer, sessionId, assistantMessageId),
           experimental_transform: smoothStream({
-            delayInMs: 2, // optional: defaults to 0 (no delay)
-            chunking: "word", // optional: defaults to 'word'
+            delayInMs: 2,
+            chunking: "word",
           }),
-          onAbort: async () => {
-            console.log(
-              `Deep search for session ${sessionId} aborted by user.`
-            );
-            await updateActiveStreamId(sessionId, null);
-          },
           stopWhen: stepCountIs(10),
-          onStepFinish: async ({ toolCalls, toolResults, finishReason }) => {
-            // Get current progress from database
-            const progressData = await calculateMessageProgress(
-              assistantMessageId
-            );
-            const currentStep = progressData
-              ? progressData.completedSteps + 1
-              : 1;
-
-            console.log(
-              `[STEP ${currentStep}] Finished - Reason: ${finishReason}`
-            );
-
+          onStepFinish: async ({ toolCalls, toolResults }) => {
             for (const toolCall of toolCalls) {
-              console.log(`  Tool: ${toolCall.toolName}`);
-
               // Check if this was the analysis tool
               if (toolCall.toolName === "analyzeQueryTool") {
                 const result = toolResults.find(
@@ -140,104 +115,58 @@ Do not call unnecessary tools. Be efficient.
                   };
 
                   if (analysisResult.needsDeepSearch) {
-                    // Enable deep search for this message
-                    await updateDeepSearchMessageProgress(
-                      sessionId,
-                      assistantMessageId,
-                      0,
-                      false,
-                      true
-                    );
-
-                    // Calculate expected total steps for planning log
+                    // Initialize progress tracking
                     const searchCount =
                       analysisResult.searchQueries?.length || 1;
-                    const expectedTotalSteps = 1 + searchCount + 2; // 1 analysis + N searches + 1 synthesis + 1 report
-
-                    console.log(
-                      `[PLANNING] Deep search with ${searchCount} searches (${expectedTotalSteps} expected steps)`
-                    );
+                    await progressManager.initialize(searchCount);
                   } else {
-                    // Simple response - no deep search needed
-                    console.log("[PLANNING] Simple response - no deep search");
-
-                    // Mark as complete immediately
-                    await updateDeepSearchMessageProgress(
-                      sessionId,
-                      assistantMessageId,
-                      100,
-                      true
-                    );
+                    // Simple response - mark complete immediately
+                    await progressManager.markComplete();
                   }
                 }
               }
             }
-
-            // Sync progress based on current database state
-            const syncedProgress = await syncMessageProgress(
-              assistantMessageId
-            );
-
-            if (syncedProgress && syncedProgress.isDeepSearch) {
-              console.log(
-                `[PROGRESS] ${syncedProgress.progress}% (${syncedProgress.completedSteps}/${syncedProgress.totalSteps} steps)`
-              );
-            }
           },
 
-          onFinish: async ({ text, toolCalls, finishReason }) => {
-            console.log(
-              `[FINISH] Reason: ${finishReason}, Tool calls: ${toolCalls.length}`
-            );
-
+          onFinish: async ({ text }) => {
             // Save final text content
             if (text) {
               await updateAssistantMessageContent(assistantMessageId, text);
             }
 
-            // Get current progress to check if this is a deep search
-            const progressData = await calculateMessageProgress(
-              assistantMessageId
-            );
-
-            if (progressData && progressData.isDeepSearch) {
-              // Ensure 100% completion for deep search
-              await updateDeepSearchMessageProgress(
-                sessionId,
-                assistantMessageId,
-                100,
-                true
-              );
-
-              // Send final completion event
-              writer.write({
-                type: "data-deepSearchDataPart",
-                id: `final-${Date.now()}`,
-                data: {
-                  progress: 100,
-                  messageId: assistantMessageId,
-                  text: "Complete",
-                  state: "done",
-                  isDeepSearchInitiated: true,
-                  type: "deep-search",
-                  id: "",
-                },
-              });
+            // Get current state and mark complete if deep search
+            const state = await progressManager.getState();
+            if (state.isDeepSearch && !state.isComplete) {
+              await progressManager.markComplete();
+              await progressManager.emitProgress(writer, "Complete", "done");
             }
           },
         });
+        // write the start marker (id must be the same across start/delta/end)
+        writer.write({
+          type: "text-start",
+          id: assistantMessageId,
+        });
 
-        writer.merge(
-          agent.toUIMessageStream({
-            originalMessages: safeMessages,
-            generateMessageId: () => assistantMessageId,
-          })
-        );
+        // stream the text chunks (agent.textStream is async)
+        for await (const chunk of agent.textStream) {
+          writer.write({
+            type: "text-delta", // incremental chunk event
+            id: assistantMessageId, // same id as the text-start above
+            delta: chunk, // use `delta` (not `text`)
+          });
+        }
+
+        // write the end marker
+        writer.write({
+          type: "text-end",
+          id: assistantMessageId,
+        });
+
+        // writer.merge(agent.toUIMessageStream());
       },
-      originalMessages: safeMessages,
 
-      onFinish: async ({ messages }) => {
-        console.log("[STREAM] Complete - Messages:", messages.length);
+      onFinish: async () => {
         await updateActiveStreamId(sessionId, null);
       },
     });
@@ -246,25 +175,19 @@ Do not call unnecessary tools. Be efficient.
       stream,
 
       async consumeSseStream({ stream }) {
+        console.log("Stream: ", stream);
+        const streamId = generateId();
         const streamContext = createResumableStreamContext({
           waitUntil: after,
         });
 
         try {
-          // 1) create/reserve the stream in Redis (publisher side)
           await streamContext.createNewResumableStream(streamId, () => stream);
-
-          // 2) after the stream is created in Redis, persist it so resume won't race
           await updateActiveStreamId(sessionId, streamId);
-
-          console.log(
-            `Resumable stream ${streamId} created and saved for session ${sessionId}`
-          );
         } catch (err) {
           console.error("Error creating resumable stream:", err);
-          // ensure no stale activeStreamId if something partially succeeded
           await updateActiveStreamId(sessionId, null);
-          throw err; // let createUIMessageStreamResponse surface the error
+          throw err;
         }
       },
     });

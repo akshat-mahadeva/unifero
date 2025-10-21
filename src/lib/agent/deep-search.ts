@@ -1,70 +1,29 @@
-// import { updateDeepSearchMessageProgress } from "@/actions/deep-search.actions";
 import {
   saveDeepSearchSources,
   createDeepSearchStep,
   updateDeepSearchStepReasoning,
-  enableDeepSearch,
-  updateDeepSearchMessageProgress,
 } from "@/actions/deep-search.actions";
 import { openai } from "@ai-sdk/openai";
 import { generateObject, generateText, tool, UIMessageStreamWriter } from "ai";
-import Exa from "exa-js";
+// import Exa from "exa-js";
 import z from "zod";
 import { DeepSearchStepType } from "@/types/deep-search";
 import { randomUUID } from "crypto";
+import { createProgressManager } from "./progress-manager";
+import { tavily } from "@tavily/core";
+import { uniferoWebSearch } from "../tools/uniferoSearch";
 
-export const exa = new Exa(process.env.EXA_API_KEY!);
+// export const exa = new Exa(process.env.EXA_API_KEY!);
 
-// Progress calculation helper
-export class ProgressCalculator {
-  private phases = {
-    analysis: { weight: 15 },
-    research: { weight: 40 },
-    synthesis: { weight: 25 },
-    report: { weight: 20 },
-  };
-
-  private currentProgress = 0;
-  private totalSearches = 1;
-  private completedSearches = 0;
-
-  setTotalSearches(count: number) {
-    this.totalSearches = Math.max(1, count);
-  }
-
-  getAnalysisProgress(): number {
-    this.currentProgress = this.phases.analysis.weight;
-    return this.currentProgress;
-  }
-
-  getSearchProgress(): number {
-    this.completedSearches++;
-    const searchProgress =
-      (this.completedSearches / this.totalSearches) *
-      this.phases.research.weight;
-    this.currentProgress = this.phases.analysis.weight + searchProgress;
-    return Math.floor(this.currentProgress);
-  }
-
-  getSynthesisProgress(): number {
-    this.currentProgress =
-      this.phases.analysis.weight +
-      this.phases.research.weight +
-      this.phases.synthesis.weight;
-    return Math.floor(this.currentProgress);
-  }
-
-  getReportProgress(): number {
-    return 100;
-  }
-}
+export const tavilyClient = tavily({ apiKey: process.env.TAVILY_API_KEY! });
 
 export function getTools(
   writer: UIMessageStreamWriter,
   sessionId: string,
-  messageId: string,
-  progressCalc: ProgressCalculator
+  messageId: string
 ) {
+  const progressManager = createProgressManager(messageId, sessionId);
+
   // Tool 1: Analyze query to determine approach
   const analyzeQueryTool = tool({
     description:
@@ -77,8 +36,6 @@ export function getTools(
         .describe("Optional reasoning for analysis"),
     }),
     execute: async ({ query, reasoning }) => {
-      console.log("[ANALYZE] Starting query analysis...");
-
       const step = await createDeepSearchStep({
         sessionId,
         messageId,
@@ -132,10 +89,6 @@ Default to deep search for any uncertainty or research-oriented queries.`,
         }),
       });
 
-      console.log(
-        `[ANALYZE] Result: ${object.needsDeepSearch ? "DEEP SEARCH" : "SIMPLE"}`
-      );
-
       // Update step reasoning
       if (step) {
         await updateDeepSearchStepReasoning(
@@ -144,45 +97,10 @@ Default to deep search for any uncertainty or research-oriented queries.`,
         );
       }
 
-      // If deep search needed, enable it and set progress
-      if (object.needsDeepSearch) {
-        await enableDeepSearch(sessionId, messageId);
-
-        const searchCount = object.searchQueries?.length || 1;
-        progressCalc.setTotalSearches(searchCount);
-
-        const progress = progressCalc.getAnalysisProgress();
-        await updateDeepSearchMessageProgress(
-          sessionId,
-          messageId,
-          progress,
-          false
-        );
-
-        writer.write({
-          type: "data-deepSearchDataPart",
-          id: `data-${stepEventId}`,
-          data: {
-            id: `data-${stepEventId}`,
-            progress,
-            messageId,
-            text: "Deep search initiated",
-            isDeepSearchInitiated: true,
-          },
-        });
-
-        writer.write({
-          type: "data-deepSearchReasoningPart",
-          id: `reasoning-${stepEventId}`,
-          data: {
-            id: `reasoning-${stepEventId}`,
-            stepId: step?.id,
-            reasoningText:
-              "Generating Steps: " + object.searchQueries?.join(", "),
-            reasoningType: "analysis",
-            search: [],
-          },
-        });
+      // Mark analysis step as complete
+      if (step) {
+        await (await progressManager).completeStep(step.id);
+        await (await progressManager).emitProgress(writer, "Analysis complete");
       }
 
       return {
@@ -200,7 +118,6 @@ Default to deep search for any uncertainty or research-oriented queries.`,
       originalQuery: z.string().describe("User's original question"),
     }),
     execute: async ({ query, originalQuery }) => {
-      console.log(`[SEARCH] Executing search: "${query}"`);
       const step = await createDeepSearchStep({
         sessionId,
         messageId,
@@ -225,41 +142,22 @@ Default to deep search for any uncertainty or research-oriented queries.`,
         },
       });
 
-      // Mock Exa results for testing
-      const mockResults = [
-        {
-          id: 1,
-          title: "OpenAI Research Paper",
-          url: "https://openai.com/research/gpt-4",
-          favicon:
-            "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSobT6Nq7W-FJnK5lLapZlwySLwB0W4sKCYDg&s",
-          text: "Detailed analysis of GPT-4 capabilities.",
-          image: undefined,
-          publishedDate: "2024-02-20",
-        },
+      const initialResponse = await uniferoWebSearch(query, 5);
 
-        {
-          id: 2,
-          title: "Google DeepMind",
-          url: "https://deepmind.google/",
-          favicon: "https://www.google.com/favicon.ico",
-          text: "Advancements in AI and machine learning.",
-          image: undefined,
-          publishedDate: "2024-01-15",
-        },
-      ];
-
+      // check the response title is not empty
+      const response = initialResponse.results.filter(
+        (res) => res.title && res.title.trim() !== ""
+      );
       // eslint-disable-next-line prefer-const
-      searchResults = mockResults;
+      searchResults = response.map((r) => ({
+        title: r.title,
+        url: r.url,
+        favicon: r.favicon || r.og_image || "",
+        text: r.content,
+        image: r.og_image || undefined,
+        publishedDate: undefined,
+      }));
 
-      // Comment out actual Exa call
-      // const { results } = await exa.searchAndContents(query, {
-      //   livecrawl: "auto",
-      //   numResults: 2,
-      // });
-      // const searchResults = results;
-
-      // Stream sources to UI
       writer.write({
         type: "data-deepSearchReasoningPart",
         id: `reasoning-${stepEventId}`,
@@ -299,11 +197,9 @@ Default to deep search for any uncertainty or research-oriented queries.`,
             name: r.title || "Untitled",
             url: r.url,
             favicon: r.favicon,
-            content: r.text,
+            content: r.text ?? undefined,
             images: r.image ? [r.image] : undefined,
-            publishedDate: r.publishedDate
-              ? new Date(r.publishedDate)
-              : undefined,
+            publishedDate: undefined,
           })),
           step.id
         );
@@ -312,28 +208,11 @@ Default to deep search for any uncertainty or research-oriented queries.`,
           step.id,
           `Found ${searchResults.length} sources`
         );
+
+        // Mark step as complete and emit progress
+        await (await progressManager).completeStep(step.id);
+        await (await progressManager).emitProgress(writer, "Search completed");
       }
-
-      // Update progress
-      const progress = progressCalc.getSearchProgress();
-      await updateDeepSearchMessageProgress(
-        sessionId,
-        messageId,
-        progress,
-        false
-      );
-
-      writer.write({
-        type: "data-deepSearchDataPart",
-        id: `data-${stepEventId}`,
-        data: {
-          id: `data-${stepEventId}`,
-          progress,
-          messageId,
-          text: `Search completed`,
-          isDeepSearchInitiated: true,
-        },
-      });
 
       return {
         sources: searchResults.map((r) => ({
@@ -360,8 +239,6 @@ Default to deep search for any uncertainty or research-oriented queries.`,
         .describe("Optional reasoning for synthesis"),
     }),
     execute: async ({ originalQuery, findings, reasoning }) => {
-      console.log("[SYNTHESIZE] Analyzing findings...");
-
       const step = await createDeepSearchStep({
         sessionId,
         messageId,
@@ -400,40 +277,13 @@ Extract 3-5 key insights that directly answer the question.`,
 
       if (step) {
         await updateDeepSearchStepReasoning(step.id, object.synthesis);
+
+        // Mark step as complete and emit progress
+        await (await progressManager).completeStep(step.id);
+        await (
+          await progressManager
+        ).emitProgress(writer, "Synthesis complete");
       }
-
-      // Stream updated reasoning
-      writer.write({
-        type: "data-deepSearchReasoningPart",
-        id: `reasoning-final-${stepEventId}`,
-        data: {
-          stepId: step?.id,
-          reasoningText: object.synthesis,
-          reasoningType: "evaluation",
-          search: [],
-        },
-      });
-
-      // Update progress
-      const progress = progressCalc.getSynthesisProgress();
-      await updateDeepSearchMessageProgress(
-        sessionId,
-        messageId,
-        progress,
-        false
-      );
-
-      writer.write({
-        type: "data-deepSearchDataPart",
-        id: `data-${stepEventId}`,
-        data: {
-          id: `data-${stepEventId}`,
-          progress,
-          messageId,
-          text: "Synthesis complete",
-          isDeepSearchInitiated: true,
-        },
-      });
 
       return {
         insights: object.insights,
@@ -453,8 +303,6 @@ Extract 3-5 key insights that directly answer the question.`,
       insights: z.array(z.string()),
     }),
     execute: async ({ originalQuery, synthesis, insights }) => {
-      console.log("[REPORT] Generating final report...");
-
       const step = await createDeepSearchStep({
         sessionId,
         messageId,
@@ -505,41 +353,12 @@ Format as clear, informative response with markdown structure.`,
         await updateDeepSearchStepReasoning(step.id, "Report completed", {
           report: text,
         });
+
+        // Mark step as complete and emit final progress
+        await (await progressManager).completeStep(step.id);
+        await (await progressManager).markComplete();
+        await (await progressManager).emitProgress(writer, "Complete", "done");
       }
-
-      // Stream updated reasoning
-      writer.write({
-        type: "data-deepSearchReasoningPart",
-        id: `reasoning-final-${stepEventId}`,
-        data: {
-          stepId: step?.id,
-          reasoningText: "Report completed",
-          reasoningType: "report",
-          search: [],
-        },
-      });
-
-      // Final progress
-      const progress = progressCalc.getReportProgress();
-      await updateDeepSearchMessageProgress(
-        sessionId,
-        messageId,
-        progress,
-        true
-      );
-
-      writer.write({
-        type: "data-deepSearchDataPart",
-        id: `data-final-${reportEventId}`,
-        data: {
-          id: `data-final-${reportEventId}`,
-          progress: 100,
-          messageId,
-          text: "Complete",
-          state: "done",
-          isDeepSearchInitiated: true,
-        },
-      });
 
       return {
         report: text,

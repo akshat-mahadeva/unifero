@@ -3,109 +3,26 @@
 //   getOrCreateDeepSearchSessionById,
 //   saveDeepSearchMessagesToSession,
 //   createAssistantMessage,
-//   updateDeepSearchMessageProgress,
 //   updateAssistantMessageContent,
 //   updateActiveStreamId,
 // } from "@/actions/deep-search.actions";
-// import { sanitizeMessages } from "@/lib/safe-messages";
-// import { openai } from "@ai-sdk/openai";
+
 // import {
-//   streamText,
-//   convertToModelMessages,
 //   generateId,
 //   createUIMessageStream,
 //   createUIMessageStreamResponse,
-//   generateObject,
+//   convertToModelMessages,
+//   streamText,
+//   stepCountIs,
+//   smoothStream,
 // } from "ai";
 // import { createResumableStreamContext } from "resumable-stream";
 // import { after } from "next/server";
 // import { DeepSearchUIMessage } from "@/types/deep-search";
-
-// // Define the Zod schema for the evaluation output
-// import { z } from "zod";
-
-// export const EvaluationSchema = z.object({
-//   // Sentiment classification
-//   sentiment: z
-//     .enum(["positive", "neutral", "negative"])
-//     .describe("Overall sentiment of the user query."),
-//   // The crucial routing decision
-//   isDeepSearchRequired: z
-//     .boolean()
-//     .describe(
-//       "True if the query requires external research (e.g., questions about current events, detailed analysis, comparisons). False if it is a simple chat, joke, or direct question."
-//     ),
-//   // A brief summary of the user's intent for logging
-//   intentSummary: z
-//     .string()
-//     .describe("A one-sentence summary of the user's goal or question."),
-//   normalReply: z
-//     .string()
-//     .describe(
-//       "A normal reply to the user's prompt if deep search is not required or ask for more information to deep search."
-//     ),
-// });
-
-// export type EvaluationResult = z.infer<typeof EvaluationSchema>;
-
-// // Background worker that updates progress and streams to client
-// async function runProgressUpdater(
-//   sessionId: string,
-//   messageId: string,
-//   writer: Parameters<
-//     Parameters<typeof createUIMessageStream>[0]["execute"]
-//   >[0]["writer"]
-// ) {
-//   const totalDuration = 2 * 60 * 1000; // 2 minutes
-//   const updateInterval = 10 * 1000; // 10 seconds
-//   const steps = Math.floor(totalDuration / updateInterval);
-
-//   for (let i = 1; i <= steps; i++) {
-//     await new Promise((resolve) => setTimeout(resolve, updateInterval));
-
-//     const progress = Math.min(99, Math.floor((i / steps) * 100));
-
-//     try {
-//       // Update database
-//       await updateDeepSearchMessageProgress(
-//         sessionId,
-//         messageId,
-//         progress,
-//         false
-//       );
-
-//       // Stream progress update to client
-//       writer.write({
-//         type: "data-deep-search-progress",
-//         id: `progress-${messageId}`,
-//         data: {
-//           progress,
-//           messageId,
-//           isDeepSearchInitiated: true,
-//         },
-//       });
-
-//       console.log(`Progress streamed: ${progress}% for message ${messageId}`);
-//     } catch (err) {
-//       console.error("Failed to update progress:", err);
-//       break; // Stop on error
-//     }
-//   }
-
-//   // Mark as completed
-//   await updateDeepSearchMessageProgress(sessionId, messageId, 100, true);
-
-//   // Send final completion update
-//   writer.write({
-//     type: "data-deep-search-progress",
-//     id: `progress-${messageId}`,
-//     data: {
-//       progress: 100,
-//       messageId,
-//       isDeepSearchInitiated: true,
-//     },
-//   });
-// }
+// import { openai } from "@ai-sdk/openai";
+// import { getTools } from "@/lib/agent/deep-search";
+// import { convertToDeepSearchUIMessages } from "@/lib/convertToUIMessage";
+// import { createProgressManager } from "@/lib/agent/progress-manager";
 
 // export async function POST(req: Request) {
 //   try {
@@ -115,14 +32,10 @@
 //       return new Response("Missing required fields", { status: 400 });
 //     }
 
-//     // Get or create session
-//     const currentSession = await getOrCreateDeepSearchSessionById(
-//       sessionId,
-//       prompt.slice(0, 20)
-//     );
+//     // Get or create session first
+//     await getOrCreateDeepSearchSessionById(sessionId, prompt.slice(0, 50));
 
-//     await updateActiveStreamId(sessionId, null);
-
+//     // Save user message first
 //     await saveDeepSearchMessagesToSession(sessionId, [
 //       {
 //         id: `user-${Date.now()}`,
@@ -131,152 +44,150 @@
 //       },
 //     ]);
 
-//     // Create assistant message SECOND (so we have a DB ID)
-//     const assistantMessage = await createAssistantMessage(
-//       sessionId,
-//       false // isDeepSearchInitiated = false
-//     );
-
+//     const assistantMessage = await createAssistantMessage(sessionId, false);
 //     const assistantMessageId = assistantMessage.id;
 
-//     // Convert messages for LLM
-//     const safeMessages = sanitizeMessages(currentSession.messages ?? []);
+//     // Re-fetch session to get the latest messages including the one we just saved
+//     const updatedSession = await getOrCreateDeepSearchSessionById(sessionId);
+//     const safeMessages = convertToDeepSearchUIMessages(
+//       updatedSession.messages ?? []
+//     );
 //     const convertedMessages = convertToModelMessages(safeMessages);
 
-//     // Generate unique stream ID BEFORE creating the stream
-//     const streamId = generateId();
-
-//     // Save stream ID to database BEFORE streaming starts
-//     await updateActiveStreamId(sessionId, streamId);
-
-//     // Create UI Message Stream with custom data streaming
 //     const stream = createUIMessageStream<DeepSearchUIMessage>({
 //       generateId: () => assistantMessageId,
+//       originalMessages: safeMessages,
 //       execute: async ({ writer }) => {
-//         const { object: evaluation } = await generateObject({
-//           model: openai("gpt-4o-mini"), // Use a cheap model for fast routing
-//           system: `Analyze the user prompt to determine if external deep research is required and classify its sentiment.`,
-//           prompt: prompt,
-//           schema: EvaluationSchema,
-//         });
-
-//         const needsDeepSearch = evaluation.isDeepSearchRequired;
-
-//         // Quick exit if deep search is not needed
-//         if (!needsDeepSearch) {
-//           writer.write({
-//             type: "text-start",
-//             id: assistantMessageId,
-//           });
-//           writer.write({
-//             type: "text-delta",
-//             id: assistantMessageId,
-//             delta: evaluation.normalReply,
-//           });
-//           writer.write({ type: "text-end", id: assistantMessageId });
-//           return;
-//         }
-
-//         // Send initial progress update
-//         writer.write({
-//           type: "data-deep-search-progress",
-//           id: `progress-${assistantMessageId}`,
-//           data: {
-//             progress: 0,
-//             messageId: assistantMessageId,
-//             isDeepSearchInitiated: true,
-//           },
-//         });
-
-//         // update the assistant message to indicate deep search has started
-//         await updateDeepSearchMessageProgress(
-//           sessionId,
+//         // Initialize progress manager
+//         const progressManager = await createProgressManager(
 //           assistantMessageId,
-//           0,
-//           false,
-//           true // isDeepSearchInitiated = true
+//           sessionId
 //         );
 
-//         // 🔥 WAIT for progress updater to complete FIRST (reaches 100%)
-//         try {
-//           await runProgressUpdater(sessionId, assistantMessageId, writer);
-//         } catch (err) {
-//           console.error("Progress updater failed:", err);
-//         }
+//         const agent = streamText({
+//           model: openai("gpt-4o-mini"),
+//           messages: [
+//             {
+//               role: "system",
+//               content: `
+// You are an intelligent research assistant.
 
-//         // 🔥 ONLY AFTER progress is 100%, start LLM streaming
-//         const result = streamText({
-//           system: `Don't respond to query just do call reply a 1 line for each query joke that's it.`,
-//           model: openai(model),
-//           messages: [...convertedMessages, { role: "user", content: prompt }],
+// WORKFLOW:
+// 1. ALWAYS call analyzeQueryTool first to assess the query
+// 2. Based on analysis:
+//    - If needsDeepSearch = false: Answer directly using your knowledge
+//    - If needsDeepSearch = true: Execute this sequence:
+//      a) Call searchWebTool for each suggested search query (usually 2-3)
+//      b) Call synthesizeTool once to analyze findings
+//      c) Call generateReportTool once for final response
+
+// RULES:
+// - analyzeQueryTool: Required first call and only call once
+// - searchWebTool: Only if deep search needed, pass originalQuery for context
+// - synthesizeTool: Only after all searches complete
+// - generateReportTool: Only after synthesis
+// - If no deep search needed, just provide a helpful direct answer
+// - If the report is generated no need to repeat the information in the final answer just summarize
+
+// Do not call unnecessary tools. Be efficient.
+// `,
+//             },
+//             ...convertedMessages,
+//           ],
+//           tools: getTools(writer, sessionId, assistantMessageId),
+//           experimental_transform: smoothStream({
+//             delayInMs: 2,
+//             chunking: "word",
+//           }),
+//           stopWhen: stepCountIs(10),
+//           onStepFinish: async ({ toolCalls, toolResults }) => {
+//             for (const toolCall of toolCalls) {
+//               // Check if this was the analysis tool
+//               if (toolCall.toolName === "analyzeQueryTool") {
+//                 const result = toolResults.find(
+//                   (r) => r.toolCallId === toolCall.toolCallId
+//                 );
+
+//                 if (result?.output) {
+//                   const analysisResult = result.output as {
+//                     needsDeepSearch: boolean;
+//                     searchQueries?: string[];
+//                   };
+
+//                   if (analysisResult.needsDeepSearch) {
+//                     // Initialize progress tracking
+//                     const searchCount =
+//                       analysisResult.searchQueries?.length || 1;
+//                     await progressManager.initialize(searchCount);
+//                   } else {
+//                     // Simple response - mark complete immediately
+//                     await progressManager.markComplete();
+//                   }
+//                 }
+//               }
+//             }
+//           },
+
+//           onFinish: async ({ text }) => {
+//             // Save final text content
+//             if (text) {
+//               await updateAssistantMessageContent(assistantMessageId, text);
+//             }
+
+//             // Get current state and mark complete if deep search
+//             const state = await progressManager.getState();
+//             if (state.isDeepSearch && !state.isComplete) {
+//               await progressManager.markComplete();
+//               await progressManager.emitProgress(writer, "Complete", "done");
+//             }
+//           },
+//         });
+//         // write the start marker (id must be the same across start/delta/end)
+//         writer.write({
+//           type: "text-start",
+//           id: assistantMessageId,
 //         });
 
-//         // 🔥 Manually stream text deltas to ensure correct message ID
-//         let isFirstChunk = true;
-//         for await (const chunk of result.textStream) {
-//           if (isFirstChunk) {
-//             writer.write({
-//               type: "text-start",
-//               id: assistantMessageId,
-//             });
-//             isFirstChunk = false;
-//           }
-
+//         // stream the text chunks (agent.textStream is async)
+//         for await (const chunk of agent.textStream) {
 //           writer.write({
-//             type: "text-delta",
-//             id: assistantMessageId,
-//             delta: chunk,
+//             type: "text-delta", // incremental chunk event
+//             id: assistantMessageId, // same id as the text-start above
+//             delta: chunk, // use `delta` (not `text`)
 //           });
 //         }
 
-//         // End the text stream
+//         // write the end marker
 //         writer.write({
 //           type: "text-end",
 //           id: assistantMessageId,
 //         });
+
+//         // writer.merge(agent.toUIMessageStream());
 //       },
-//       onFinish: async ({ messages }) => {
-//         // Extract assistant text content
-//         const assistantMessages = messages.filter(
-//           (m) => m.role === "assistant"
-//         );
 
-//         if (assistantMessages.length > 0) {
-//           const textContent = assistantMessages[0].parts
-//             .filter((part) => part.type === "text")
-//             .map((part) => {
-//               if (part.type === "text" && "text" in part) {
-//                 return part.text;
-//               }
-//               return "";
-//             })
-//             .join("\n");
-
-//           // Update the existing assistant message content
-//           await updateAssistantMessageContent(assistantMessageId, textContent);
-//         }
-
-//         // Clear the active stream when finished
+//       onFinish: async () => {
 //         await updateActiveStreamId(sessionId, null);
 //       },
 //     });
 
-//     // Return response with resumable stream support
 //     return createUIMessageStreamResponse({
 //       stream,
-//       async consumeSseStream({ stream }) {
-//         try {
-//           // CREATE RESUMABLE STREAM using the streamId we already saved
-//           const streamContext = createResumableStreamContext({
-//             waitUntil: after,
-//           });
 
+//       async consumeSseStream({ stream }) {
+//         console.log("Stream: ", stream);
+//         const streamId = generateId();
+//         const streamContext = createResumableStreamContext({
+//           waitUntil: after,
+//         });
+
+//         try {
 //           await streamContext.createNewResumableStream(streamId, () => stream);
-//         } catch (error) {
-//           console.error("Error in consumeSseStream:", error);
-//           // Clear the activeStreamId if stream creation fails
+//           await updateActiveStreamId(sessionId, streamId);
+//         } catch (err) {
+//           console.error("Error creating resumable stream:", err);
 //           await updateActiveStreamId(sessionId, null);
-//           throw error;
+//           throw err;
 //         }
 //       },
 //     });

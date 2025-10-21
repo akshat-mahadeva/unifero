@@ -628,12 +628,6 @@ export const saveDeepSearchSources = async (
       if (!step) throw new Error("Step not found");
     }
 
-    console.log(
-      `Saving ${sources.length} sources for message ${messageId}${
-        stepId ? ` (step: ${stepId})` : ""
-      }`
-    );
-
     // Use upsert to prevent duplicates based on url and stepId
     const savedSources = [];
     for (const source of sources) {
@@ -713,8 +707,6 @@ export const updateDeepSearchStepReasoning = async (
     if (step.deepSearchMessage.session.userId !== userId)
       throw new Error("Not authorized");
 
-    console.log(`Saving reasoning for step ${stepId}: ${reasoningText}`);
-
     return await prisma.deepSearchStep.update({
       where: { id: stepId },
       data: {
@@ -749,7 +741,6 @@ export async function enableDeepSearch(sessionId: string, messageId: string) {
       },
     });
 
-    console.log(`✓ Deep search enabled for message: ${messageId}`);
     return { success: true, message: updated };
   } catch (err) {
     handleError("enableDeepSearch", err);
@@ -902,10 +893,6 @@ export async function syncMessageProgress(messageId: string) {
         updatedAt: new Date(),
       },
     });
-
-    console.log(
-      `[SYNC] Progress updated: ${progressData.progress}% (${progressData.completedSteps}/${progressData.totalSteps} steps)`
-    );
 
     return {
       ...progressData,

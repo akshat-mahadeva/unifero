@@ -1,8 +1,9 @@
 import { tool } from "ai";
-import Exa from "exa-js";
+// import Exa from "exa-js";
 import { z } from "zod";
+import { uniferoWebSearch } from "./uniferoSearch";
 
-const exa = new Exa(process.env.EXA_API_KEY!);
+// const exa = new Exa(process.env.EXA_API_KEY!);
 
 export const webSearchTool = tool({
   name: "webSearch",
@@ -58,38 +59,18 @@ This tool is your superpower - use it liberally to provide the most current, acc
   }),
   execute: async ({ query }) => {
     try {
-      const { results } = await exa.searchAndContents(query, {
-        livecrawl: "always",
-        numResults: 5, // Increased for better coverage
-      });
-
-      console.log(`🔍 WebSearchTool Query: "${query}"`);
-      console.log(`🌐 Retrieved ${results.length} raw results from Exa`);
-
-      // if (results.length === 0) {
-      //   console.log("⚠️ No search results found");
-      //   return {
-      //     results: [
-      //       {
-      //         sources: [
-      //           {
-      //             title: "No Results Found",
-      //             url: "",
-      //             text: `No web results were found for the query: "${query}". This could mean the topic is very new, very specific, or the search terms might need adjustment.`,
-      //             image: undefined,
-      //           },
-      //         ],
-      //       },
-      //     ],
-      //   };
-      // }
+      // const { results } = await exa.searchAndContents(query, {
+      //   livecrawl: "always",
+      //   numResults: 5, // Increased for better coverage
+      // });
+      const data = await uniferoWebSearch(query, 5);
 
       // Map and normalize Exa results into sources with enhanced data
-      const sources = results.map((r) => ({
+      const sources = data.results.map((r) => ({
         title: r.title || "Untitled",
         url: r.url,
-        text: r.text?.slice(0, 500) || "No content preview available.",
-        image: r.image || r.favicon || undefined,
+        text: r.content?.slice(0, 500) || "No content preview available.",
+        image: r.favicon || r.og_image || undefined,
       }));
 
       // console.log(`✅ Found ${sources.length} search results`);

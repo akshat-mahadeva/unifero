@@ -79,6 +79,7 @@ model DeepSearchMessage {
   sessionId              String
   isDeepSearchInitiated  Boolean                  @default(false)
   completed              Boolean                  @default(false)
+  metadata               Json?
   session                DeepSearchSession        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   DeepSearchToolSnapshot DeepSearchToolSnapshot[]
   DeepSearchStep         DeepSearchStep[]
