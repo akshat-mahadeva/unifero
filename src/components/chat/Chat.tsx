@@ -96,19 +96,6 @@ const Chat = ({
             ? lastMessage.parts[0].text
             : "";
 
-        if (
-          window.location.pathname === "/" ||
-          window.location.pathname === "/web-search"
-        ) {
-          window.history.replaceState({}, "", `/chat/${sessionId}`);
-          setTimeout(() => {
-            queryClient.invalidateQueries({
-              queryKey: sessionKeys.detail(sessionId),
-            });
-          }, 100);
-        }
-        window.dispatchEvent(new CustomEvent("chat-history-updated"));
-
         const requestBody = {
           prompt: prompt,
           sessionId: sessionId,
@@ -120,6 +107,20 @@ const Chat = ({
       },
     }),
     messages: initialMessages,
+    onData: () => {
+      if (
+        window.location.pathname === "/" ||
+        window.location.pathname === "/web-search"
+      ) {
+        window.history.replaceState({}, "", `/chat/${sessionId}`);
+        setTimeout(() => {
+          queryClient.invalidateQueries({
+            queryKey: sessionKeys.detail(sessionId),
+          });
+        }, 100);
+      }
+      window.dispatchEvent(new CustomEvent("chat-history-updated"));
+    },
     onFinish: () => {
       if (
         window.location.pathname === "/" ||

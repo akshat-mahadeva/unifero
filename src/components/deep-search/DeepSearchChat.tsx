@@ -106,19 +106,6 @@ const DeepSearchChat = ({
             ? lastMessage.parts[0].text
             : "";
 
-        if (
-          window.location.pathname === "/" ||
-          window.location.pathname === "/deep-search"
-        ) {
-          window.history.replaceState({}, "", `/deep-search/${sessionId}`);
-          setTimeout(() => {
-            queryClient.invalidateQueries({
-              queryKey: deepSearchSessionKeys.detail(sessionId),
-            });
-          }, 100);
-        }
-        window.dispatchEvent(new CustomEvent("chat-history-updated"));
-
         return {
           body: {
             prompt,
@@ -171,6 +158,19 @@ const DeepSearchChat = ({
         // Auto-open the sheet when deep search progress starts (first progress event)
         setOpenSheetId(dataPart.data.messageId);
       }
+
+      if (
+        window.location.pathname === "/" ||
+        window.location.pathname === "/deep-search"
+      ) {
+        window.history.replaceState({}, "", `/deep-search/${sessionId}`);
+        setTimeout(() => {
+          queryClient.invalidateQueries({
+            queryKey: deepSearchSessionKeys.detail(sessionId),
+          });
+        }, 100);
+      }
+      window.dispatchEvent(new CustomEvent("chat-history-updated"));
     },
   });
 
