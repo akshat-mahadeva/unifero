@@ -106,7 +106,9 @@ const DeepSearchCanvas = ({
                                     className="w-3 h-3"
                                   />
                                 )}
-                                <span className="text-xs">{item.title}</span>
+                                <span className="text-xs truncate">
+                                  {item.title}
+                                </span>
                               </Badge>
                             </Link>
                           ))}
