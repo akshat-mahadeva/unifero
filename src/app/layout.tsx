@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
-import { dark } from "@clerk/themes";
+import { shadcn } from "@clerk/themes";
 import { Toaster } from "sonner";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { Manrope } from "next/font/google";
@@ -34,11 +34,9 @@ export default function RootLayout({
   return (
     <ClerkProvider
       appearance={{
-        baseTheme: [dark],
-        variables: { colorPrimary: "blue" },
-        signIn: {
-          baseTheme: [dark],
-          variables: { colorPrimary: "pink" },
+        baseTheme: [shadcn],
+        variables: {
+          colorPrimary: "#6366f1",
         },
       }}
     >
